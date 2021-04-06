@@ -13,3 +13,10 @@
 ```sh
 # Getting this repository 
 git clone https://github.com/scientisst/scientisst-sense-api-cpp.git --recursive
+```
+
+## Running (Linux/MacOS)
+```sh
+# Example usage
+./scientisst output.csv
+```
