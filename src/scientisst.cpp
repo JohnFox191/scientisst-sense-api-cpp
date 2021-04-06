@@ -14,7 +14,6 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
-#include "cJSON.h"
 
 #ifdef HASBLUETOOTH  // Linux only
 
@@ -33,8 +32,14 @@ void Sleep(int millisecs)
 
 #endif // Linux or Mac OS
 
-
-#include "bitalino.h"
+#include <algorithm>    // std::sort
+#include "scientisst.h"
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
+#include "../ext/rapidjson/include/rapidjson/document.h"
+#include "../ext/rapidjson/include/rapidjson/writer.h"
+#include "../ext/rapidjson/include/rapidjson/stringbuffer.h"
 
 /*****************************************************************************/
 
@@ -62,9 +67,9 @@ static bool checkCRC4(const unsigned char *data, int len)
 
 /*****************************************************************************/
 
-// BITalino public methods
+// ScientISST public methods
 
-BITalino::VDevInfo BITalino::find(void)
+ScientISST::VDevInfo ScientISST::find(void)
 {
    VDevInfo devs;
    DevInfo  devInfo;
@@ -173,8 +178,7 @@ BITalino::VDevInfo BITalino::find(void)
 
 /*****************************************************************************/
 
-BITalino::BITalino(const char *address) : num_chs(0), isBitalino2(false)
-{
+ScientISST::ScientISST(const char *address) : num_chs(0){
 #ifdef _WIN32
    if (_memicmp(address, "COM", 3) == 0)
    {
@@ -360,19 +364,14 @@ BITalino::BITalino(const char *address) : num_chs(0), isBitalino2(false)
 
 #endif // Linux or Mac OS
 
-   // check if device is BITalino2
-   const std::string ver = version();
-   const std::string::size_type pos = ver.find("_v");
-   if (pos != std::string::npos)
-   {
-      const char *xver = ver.c_str() + pos+2;
-      if (atoi(xver) >= 5)  isBitalino2 = true;
-   }
+   api_mode =  API_MODE_SCIENTISST;
+   output_fd = NULL;
+
 }
 
 /*****************************************************************************/
 
-BITalino::~BITalino(void)
+ScientISST::~ScientISST(void)
 {
     try
     {
@@ -385,7 +384,7 @@ BITalino::~BITalino(void)
 
 /*****************************************************************************/
 
-void BITalino::changeAPI(uint8_t api){
+void ScientISST::changeAPI(uint8_t api){
     if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
 
     api_mode = api;
@@ -402,11 +401,11 @@ void BITalino::changeAPI(uint8_t api){
 
 /*****************************************************************************/
 
-std::string BITalino::version(void){
+std::string ScientISST::version(void){
     uint8_t cmd;
     if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
     
-    const char *header = "BITalino";
+    const char *header = "ScientISST";
     
     const size_t headerLen = strlen(header);
 
@@ -437,25 +436,31 @@ std::string BITalino::version(void){
     }
 }
 
-int BITalino::getPacketSize(){
+int ScientISST::getPacketSize(){
     uint8_t _packet_size = 0;
     int num_intern_active_chs = 0;
+    int num_extern_active_chs = 0;
+    rapidjson::Document d;
+    char value_internal_str[50];
+    char value_external_str[50];
+    char aux_str[50];
+    rapidjson::Value classname;
+    rapidjson::Value member_name(aux_str, strlen(aux_str), d.GetAllocator());
+    rapidjson::Value member_value(aux_str, strlen(aux_str), d.GetAllocator());
 
-    if(api_mode == API_MODE_BITALINO){
-        _packet_size = num_chs + 2;
-        if (num_chs >= 3 && num_chs <= 5)  _packet_size++;
-    }else if(api_mode == API_MODE_SCIENTISST){
+    for(int i = 0; i < num_chs; i++){
+        //Add 24bit channel's contributuion to packet size
+        if(chs[i] == 6 || chs[i] == 7){
+            num_extern_active_chs++;
+        
+        //Count 12bit channels
+        }else{
+            num_intern_active_chs++;
+        }
+    } 
 
-        for(int i = 0; i < num_chs; i++){
-            //Add 24bit channel's contributuion to packet size
-            if(chs[i] == 6 || chs[i] == 7){
-                _packet_size += 3;
-            
-            //Count 12bit channels
-            }else{
-                num_intern_active_chs++;
-            }
-        }        
+    if(api_mode == API_MODE_SCIENTISST){       
+        _packet_size = 3*num_extern_active_chs;
 
         //Add 12bit channel's contributuion to packet size 
         if(!(num_intern_active_chs % 2)){                    //If it's an even number
@@ -465,6 +470,40 @@ int BITalino::getPacketSize(){
         }
         _packet_size += 2;  //for the I/Os and seq+crc bytes
 
+    }else if(api_mode == API_MODE_JSON){
+        d.SetObject();
+
+        //Load value strings with channels' respective max values
+        sprintf(value_internal_str, "%04d", 4095);     
+        sprintf(value_external_str, "%08d", 16777215);
+
+        for(int i = 0; i < num_chs; i++){
+            //If it's internal ch
+            if(chs[i] <= 6){
+                sprintf(aux_str, "AI%d", chs[i]);
+                member_name.SetString(aux_str, d.GetAllocator());
+                member_value.SetString(value_internal_str, d.GetAllocator());
+                d.AddMember(member_name, member_value, d.GetAllocator());
+                
+            }else{
+                sprintf(aux_str, "AX%d", chs[i]-6);
+                member_name.SetString(aux_str, d.GetAllocator());
+                member_value.SetString(value_external_str, d.GetAllocator());
+                d.AddMember(member_name, member_value, d.GetAllocator());
+            }   
+        }
+        //Add IO state json objects
+        d.AddMember("I1", "0", d.GetAllocator());
+        d.AddMember("I2", "0", d.GetAllocator());
+        d.AddMember("O1", "0", d.GetAllocator());
+        d.AddMember("O2", "0", d.GetAllocator());
+
+        // 3. Stringify the DOM
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        d.Accept(writer);
+
+        _packet_size = strlen(buffer.GetString())+1;
     }
     
     return _packet_size;
@@ -472,13 +511,27 @@ int BITalino::getPacketSize(){
 
 /*****************************************************************************/
 
-void BITalino::start(int sample_rate, const Vint &channels, bool simulated){
+void ScientISST::start(int sample_rate, const Vint &channels, const char* file_name, bool simulated, int api){
     uint8_t buffer[10];
     uint16_t cmd;
     uint32_t fs;
     char chMask;
     
     if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
+
+    if(api != API_MODE_JSON && api != API_MODE_SCIENTISST){
+        throw Exception(Exception::INVALID_PARAMETER);
+    }
+
+    //Clear chs vec
+    memset(chs, 0, 8*sizeof(int));
+    num_chs = 0;
+
+    //Change API mode
+    changeAPI(api);
+
+    //Open file and write header
+    initFile(file_name);
     
     switch (sample_rate){
         case 1:
@@ -519,24 +572,21 @@ void BITalino::start(int sample_rate, const Vint &channels, bool simulated){
         num_chs = 8;
     }else{
         chMask = 0;
-        num_chs = 0;
         for(Vint::const_iterator it = channels.begin(); it != channels.end(); it++){
             int ch = *it;
             chs[num_chs] = ch;        //Fill chs vector
-            if (ch < 0 || ch > 7)   throw Exception(Exception::INVALID_PARAMETER);
+            if (ch < 0 || ch > 8)   throw Exception(Exception::INVALID_PARAMETER);
             const char mask = 1 << ch;
             if (chMask & mask)   throw Exception(Exception::INVALID_PARAMETER);
             chMask |= mask;
             num_chs++;
         }
     }
-
     
     cmd <<= 6;
     cmd |= 0b11;
     send((uint8_t*)&cmd, sizeof(cmd));
     
-
     //Cleanup existing data in bluetooth socket
     while(recv(buffer, 1) == 1);
    
@@ -549,7 +599,7 @@ void BITalino::start(int sample_rate, const Vint &channels, bool simulated){
 
 /*****************************************************************************/
 
-void BITalino::stop(void){
+void ScientISST::stop(void){
     uint8_t buffer[10];
     uint8_t cmd;
 
@@ -562,25 +612,28 @@ void BITalino::stop(void){
 
     //Cleanup existing data in bluetooth socket
     while(recv(buffer, 1) == 1);
+
+    fclose(output_fd);
 }
 
 /*****************************************************************************/
 
-int BITalino::read(VFrame &frames){
-    unsigned char buffer[100];
+int ScientISST::read(VFrame &frames){
+    unsigned char buffer[500];
     int mid_frame_flag = 0;
-
+    rapidjson::Document d;
+    char memb_name[50];
+    int curr_ch;
+    char* junk;
 
     if (num_chs == 0)   throw Exception(Exception::DEVICE_NOT_IN_ACQUISITION);
-
-    
 
     if (frames.empty())   frames.resize(100);
 
 
     for(VFrame::iterator it = frames.begin(); it != frames.end(); it++){
         if(recv(buffer, packet_size) == ESP_STOP_LIVE_MODE ){
-            printf("Esp stopped sending frames -> It stopped live mode on its own (probably because it can't handle this number of channels + sample rate)\n");
+            printf("Esp stopped sending frames -> It stopped live mode on its own \n(probably because it can't handle this number of channels + sample rate)\n");
             return ESP_STOP_LIVE_MODE;
         }
 
@@ -589,8 +642,6 @@ int BITalino::read(VFrame &frames){
             memmove(buffer, buffer+1, packet_size-1);
             if (recv(buffer+packet_size-1, 1) != 1)    return int(it - frames.begin());   // a timeout has occurred
         }
-
-
 
         Frame &f = *it;
 
@@ -602,7 +653,7 @@ int BITalino::read(VFrame &frames){
 
             //Get channel values
             for(int i = 0; i < num_chs;){
-                int curr_ch = chs[num_chs-1-i];
+                curr_ch = chs[num_chs-1-i];
                 
                 //If it's an AX channel
                 if(curr_ch == AX1 || curr_ch == AX2){
@@ -622,11 +673,22 @@ int BITalino::read(VFrame &frames){
                     }
                 }
             }
+        }else if(api_mode == API_MODE_JSON){
+            d.Parse((const char*)buffer);
+
+            f.seq = 1;
+
+            for(int i = 0; i < num_chs; i++){
+                sprintf(memb_name, "AI%d", chs[i]);
+                f.a[i] = strtol(d[memb_name].GetString(), &junk, 10);
+            }
+
+            f.digital[0] = strtol(d["I1"].GetString(), &junk, 10);
+            f.digital[1] = strtol(d["I2"].GetString(), &junk, 10);
+            f.digital[2] = strtol(d["O1"].GetString(), &junk, 10);
+            f.digital[3] = strtol(d["O2"].GetString(), &junk, 10);
         }
-
-       
-
-        
+        writeFrameFile(f);
     }
 
     return (int) frames.size();
@@ -634,7 +696,7 @@ int BITalino::read(VFrame &frames){
 
 /*****************************************************************************/
 
-void BITalino::battery(int value){
+void ScientISST::battery(int value){
     uint8_t cmd;
 
     if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
@@ -647,7 +709,7 @@ void BITalino::battery(int value){
 
 /*****************************************************************************/
 
-void BITalino::trigger(const Vbool &digitalOutput){
+void ScientISST::trigger(const Vbool &digitalOutput){
    unsigned char cmd;
    const size_t len = digitalOutput.size();
 
@@ -665,7 +727,7 @@ void BITalino::trigger(const Vbool &digitalOutput){
 
 /*****************************************************************************/
 
-void BITalino::dac(int pwmOutput){
+void ScientISST::dac(int pwmOutput){
     uint16_t cmd;
 
     if (pwmOutput < 0 || pwmOutput > 255)   throw Exception(Exception::INVALID_PARAMETER);
@@ -678,7 +740,7 @@ void BITalino::dac(int pwmOutput){
 
 /*****************************************************************************/
 
-BITalino::State BITalino::state(void){
+ScientISST::State ScientISST::state(void){
     uint8_t cmd;
 #pragma pack(1)  // byte-aligned structure
 
@@ -688,9 +750,6 @@ BITalino::State BITalino::state(void){
     } statex;
 
 #pragma pack()  // restore default alignment
-
-
-	if (!isBitalino2)    throw Exception(Exception::NOT_SUPPORTED);
 
     if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
 
@@ -719,7 +778,7 @@ BITalino::State BITalino::state(void){
 
 /*****************************************************************************/
 
-const char* BITalino::Exception::getDescription(void)
+const char* ScientISST::Exception::getDescription(void)
 {
 	switch (code)
    {
@@ -760,7 +819,7 @@ const char* BITalino::Exception::getDescription(void)
 
 /*****************************************************************************/
 
-void BITalino::send(uint8_t* data, int len){
+void ScientISST::send(uint8_t* data, int len){
    Sleep(150);
 
 #ifdef _WIN32
@@ -786,7 +845,7 @@ void BITalino::send(uint8_t* data, int len){
 
 /*****************************************************************************/
 
-int BITalino::recv(void *data, int nbyttoread){
+int ScientISST::recv(void *data, int nbyttoread){
 #ifdef _WIN32
    if (fd == INVALID_SOCKET)
    {
@@ -839,22 +898,51 @@ int BITalino::recv(void *data, int nbyttoread){
 
 /*****************************************************************************/
 
-void BITalino::close(void)
-{
+void ScientISST::close(void){
 #ifdef _WIN32
-   if (fd == INVALID_SOCKET)
-      CloseHandle(hCom);
-   else
-   {
-      closesocket(fd);
-      WSACleanup();
-   }
+    if (fd == INVALID_SOCKET)
+        CloseHandle(hCom);
+    else
+    {
+        closesocket(fd);
+        WSACleanup();
+    }
    
 #else // Linux or Mac OS
 
-   ::close(fd);
+    ::close(fd);
 
 #endif
 }
 
 /*****************************************************************************/
+
+void ScientISST::initFile(const char* file_name){
+    char aux[100];
+
+    output_fd = fopen(file_name, "w");
+    if(output_fd == NULL){
+        printf("Output file cannot be opened.");
+        exit(-1);
+    }
+
+    fprintf(output_fd, "NSeq, I1, I2, O1, O2, ");
+    for(int i = 0; i < num_chs; i++){
+        if(chs[i] == AX1 || chs[i] == AX2){
+            fprintf(output_fd, "AX%d, ", chs[i]-6);
+        }else{
+            fprintf(output_fd, "AI%d, ", chs[i]);
+        }
+        
+    }
+    fprintf(output_fd, "\n");
+}
+
+void ScientISST::writeFrameFile(Frame f){
+    fprintf(output_fd, "%d, %d, %d, %d, %d, \n", f.seq, f.digital[0], f.digital[1], f.digital[2], f.digital[3]);
+
+    for(int i = 0; i < num_chs; i++){
+        fprintf(output_fd, "%d, ", f.a[i]);
+    }
+    fprintf(output_fd, "\n");
+}

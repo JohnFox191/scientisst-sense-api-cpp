@@ -27,8 +27,8 @@
 #define AX1 6
 #define AX2 7
 
-/// The %BITalino device class.
-class BITalino
+/// The %ScientISST device class.
+class ScientISST
 {
 public:
 // Type definitions
@@ -36,7 +36,7 @@ public:
     typedef std::vector<bool>  Vbool;   ///< Vector of bools.
     typedef std::vector<int>   Vint;    ///< Vector of ints.
 
-    /// Information about a Bluetooth device found by BITalino::find().
+    /// Information about a Bluetooth device found by ScientISST::find().
     struct DevInfo
     {
         std::string macAddr; ///< MAC address of a Bluetooth device
@@ -44,7 +44,7 @@ public:
     };
     typedef std::vector<DevInfo> VDevInfo; ///< Vector of DevInfo's.
 
-    /// A frame returned by BITalino::read()
+    /// A frame returned by ScientISST::read()
     struct Frame{
         /// %Frame sequence number (0...15).
         /// This number is incremented by 1 on each consecutive frame, and it overflows to 0 after 15 (it is a 4-bit number).
@@ -52,8 +52,8 @@ public:
         char  seq;        
 
         /// Array of digital ports states (false for low level or true for high level).
-        /// On original %BITalino, the array contents are: I1 I2 I3 I4.
-        /// On %BITalino 2, the array contents are: I1 I2 O1 O2.
+        /// On original %ScientISST, the array contents are: I1 I2 I3 I4.
+        /// On %ScientISST 2, the array contents are: I1 I2 O1 O2.
         bool  digital[4]; 
 
         
@@ -61,18 +61,18 @@ public:
     };
     typedef std::vector<Frame> VFrame;  ///< Vector of Frame's.
 
-    /// Current device state returned by BITalino::state()
+    /// Current device state returned by ScientISST::state()
     struct State
     {
         int   analog[6],     ///< Array of analog inputs values (0...1023)
                 battery,       ///< Battery voltage value (0...1023)
-                batThreshold;  ///< Low-battery LED threshold (last value set with BITalino::battery())
+                batThreshold;  ///< Low-battery LED threshold (last value set with ScientISST::battery())
         /// Array of digital ports states (false for low level or true for high level).
         /// The array contents are: I1 I2 O1 O2.
         bool  digital[4];
     };
 
-    /// %Exception class thrown from BITalino methods.
+    /// %Exception class thrown from ScientISST methods.
     class Exception
     {
     public:
@@ -106,7 +106,7 @@ public:
 
     // Instance methods
 
-    /** Connects to a %BITalino device.
+    /** Connects to a %ScientISST device.
         * \param[in] address The device Bluetooth MAC address ("xx:xx:xx:xx:xx:xx")
         * or a serial port ("COMx" on Windows or "/dev/..." on Linux or Mac OS X)
         * \exception Exception (Exception::PORT_COULD_NOT_BE_OPENED)
@@ -115,10 +115,10 @@ public:
         * \exception Exception (Exception::BT_ADAPTER_NOT_FOUND) - Windows only
         * \exception Exception (Exception::DEVICE_NOT_FOUND) - Windows only
         */
-    BITalino(const char *address);
+    ScientISST(const char *address);
     
-    /// Disconnects from a %BITalino device. If an aquisition is running, it is stopped. 
-    ~BITalino();
+    /// Disconnects from a %ScientISST device. If an aquisition is running, it is stopped. 
+    ~ScientISST();
 
     /** Returns the device firmware version string.
         * \remarks This method cannot be called during an acquisition.
@@ -137,7 +137,7 @@ public:
         * \exception Exception (Exception::INVALID_PARAMETER)
         * \exception Exception (Exception::CONTACTING_DEVICE)
         */
-    void start(int samplingRate = 1000, const Vint &channels = Vint(), bool simulated = false);
+    void start(int samplingRate = 1000, const Vint &channels = Vint(), const char* file_name = "output.csv",  bool simulated = false, int api = API_MODE_SCIENTISST);
     
     /** Stops a signal acquisition.
         * \remarks This method must be called only during an acquisition.
@@ -173,17 +173,17 @@ public:
     /** Assigns the digital outputs states.
         * \param[in] digitalOutput Vector of booleans to assign to digital outputs, starting at first output (O1).
         * On each vector element, false sets the output to low level and true sets the output to high level.
-        * If this vector is not empty, it must contain exactly 4 elements for original %BITalino (4 digital outputs)
-        * or exactly 2 elements for %BITalino 2 (2 digital outputs).
+        * If this vector is not empty, it must contain exactly 4 elements for original %ScientISST (4 digital outputs)
+        * or exactly 2 elements for %ScientISST 2 (2 digital outputs).
         * If this parameter is not given or if the vector is empty, all digital outputs are set to low level.
-        * \remarks This method must be called only during an acquisition on original %BITalino. On %BITalino 2 there is no restriction.
+        * \remarks This method must be called only during an acquisition on original %ScientISST. On %ScientISST 2 there is no restriction.
         * \exception Exception (Exception::DEVICE_NOT_IN_ACQUISITION)
         * \exception Exception (Exception::INVALID_PARAMETER)
         * \exception Exception (Exception::CONTACTING_DEVICE)
         */
     void trigger(const Vbool &digitalOutput = Vbool());
 
-    /** Assigns the analog (PWM) output value (%BITalino 2 only).
+    /** Assigns the analog (PWM) output value (%ScientISST 2 only).
         * \param[in] pwmOutput Analog output value to set (0...255).
         * The analog output voltage is given by: V (in Volts) = 3.3 * (pwmOutput+1)/256
         * \exception Exception (Exception::INVALID_PARAMETER)
@@ -192,7 +192,7 @@ public:
         */
     void dac(int pwmOutput = 100);
 
-    /** Returns current device state (%BITalino 2 only).
+    /** Returns current device state (%ScientISST 2 only).
         * \remarks This method cannot be called during an acquisition.
         * \exception Exception (Exception::DEVICE_NOT_IDLE)
         * \exception Exception (Exception::CONTACTING_DEVICE)
@@ -207,13 +207,15 @@ private:
     int getPacketSize();
     void close(void);
     int recv(void *data, int nbyttoread);
+    void initFile(const char* file_name);
+    void writeFrameFile(Frame frame);
 
+    int num_chs;
     int packet_size;
     int api_mode;
-
+    FILE* output_fd;
     int chs[8];
-    int num_chs;
-    bool isBitalino2;
+
 #ifdef _WIN32
     SOCKET	fd;
     timeval  readtimeout;

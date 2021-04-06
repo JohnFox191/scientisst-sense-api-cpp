@@ -1,4 +1,4 @@
-TARGET_EXEC ?=dkt
+TARGET_EXEC ?=scientisst
 LDFLAGS = -lbluetooth
 CFLAGS = -DHASBLUETOOTH
 CC =g++
