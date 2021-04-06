@@ -17,6 +17,7 @@ git clone https://github.com/scientisst/scientisst-sense-api-cpp.git --recursive
 
 ## Running (Linux/MacOS)
 ```sh
+cd scientisst-sense-api-cpp
 # Example usage
 ./scientisst output.csv
 ```
