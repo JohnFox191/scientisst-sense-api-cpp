@@ -1,5 +1,5 @@
 # scientisst-sense-api-cpp
-The ScientISST C++ API.
+The ScientISST SENSE C++ API
 
 ## Repository structure
 
