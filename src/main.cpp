@@ -78,7 +78,7 @@ int main(int argc, char **argv){
 
         //dev.battery(10);  // set battery threshold (optional)
 
-        dev.start(1000, {AI1, AI2, AI3}, argv[1], false, API_MODE_SCIENTISST);   // start acquisition of all channels at 1000 Hz
+        dev.start(2000, {AI3}, argv[1], false, API_MODE_SCIENTISST);   // start acquisition of all channels at 1000 Hz
 
         //dev.trigger({true, false});                // To trigger digital outputs
 

@@ -676,6 +676,7 @@ int ScientISST::read(VFrame &frames){
                     }
                 }
             }
+            mid_frame_flag = 0;
         }else if(api_mode == API_MODE_JSON){
             d.Parse((const char*)buffer);
 
