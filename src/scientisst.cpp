@@ -511,11 +511,13 @@ int ScientISST::getPacketSize(){
 
 /*****************************************************************************/
 
-void ScientISST::start(int sample_rate, const Vint &channels, const char* file_name, bool simulated, int api){
+void ScientISST::start(int _sample_rate, const Vint &channels, const char* file_name, bool simulated, int api){
     uint8_t buffer[10];
     uint16_t cmd;
     uint32_t fs;
     char chMask;
+
+    sample_rate = _sample_rate;
     
     if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
 
@@ -529,9 +531,6 @@ void ScientISST::start(int sample_rate, const Vint &channels, const char* file_n
 
     //Change API mode
     changeAPI(api);
-
-    //Open file and write header
-    initFile(file_name);
     
     switch (sample_rate){
         case 1:
@@ -576,7 +575,7 @@ void ScientISST::start(int sample_rate, const Vint &channels, const char* file_n
             int ch = *it;
             chs[num_chs] = ch;        //Fill chs vector
             if (ch < 0 || ch > 8)   throw Exception(Exception::INVALID_PARAMETER);
-            const char mask = 1 << ch;
+            const char mask = 1 << (ch-1);
             if (chMask & mask)   throw Exception(Exception::INVALID_PARAMETER);
             chMask |= mask;
             num_chs++;
@@ -595,6 +594,9 @@ void ScientISST::start(int sample_rate, const Vint &channels, const char* file_n
     send((uint8_t*)&cmd, sizeof(cmd));
 
     packet_size = getPacketSize();
+
+    //Open file and write header
+    initFile(file_name);
 }
 
 /*****************************************************************************/
@@ -609,6 +611,7 @@ void ScientISST::stop(void){
     send(&cmd, 1); // 0  0  0  0  0  0  0  0 - Go to idle mode
 
     num_chs = 0;
+    sample_rate = 0;
 
     //Cleanup existing data in bluetooth socket
     while(recv(buffer, 1) == 1);
@@ -663,11 +666,11 @@ int ScientISST::read(VFrame &frames){
                 //If it's an AI channel
                 }else{
                     if(!mid_frame_flag){
-                        f.a[curr_ch] = *(uint16_t*)(buffer+i) & 0xFFF;
+                        f.a[curr_ch-1] = *(uint16_t*)(buffer+i) & 0xFFF;
                         i++;
                         mid_frame_flag = 1;
                     }else{
-                        f.a[curr_ch] = *(uint16_t*)(buffer+i) >> 4;
+                        f.a[curr_ch-1] = *(uint16_t*)(buffer+i) >> 4;
                         i += 2;
                         mid_frame_flag = 0;
                     }
@@ -688,7 +691,7 @@ int ScientISST::read(VFrame &frames){
             f.digital[2] = strtol(d["O1"].GetString(), &junk, 10);
             f.digital[3] = strtol(d["O2"].GetString(), &junk, 10);
         }
-        writeFrameFile(f);
+        writeFrameFile(output_fd, f);
     }
 
     return (int) frames.size();
@@ -873,7 +876,7 @@ int ScientISST::recv(void *data, int nbyttoread){
 
 #ifndef _WIN32 // Linux or Mac OS
    timeval  readtimeout;
-   readtimeout.tv_sec = 1;
+   readtimeout.tv_sec = 2;
    readtimeout.tv_usec = 0;
 #endif
 
@@ -928,21 +931,34 @@ void ScientISST::initFile(const char* file_name){
 
     fprintf(output_fd, "NSeq, I1, I2, O1, O2, ");
     for(int i = 0; i < num_chs; i++){
+
         if(chs[i] == AX1 || chs[i] == AX2){
-            fprintf(output_fd, "AX%d, ", chs[i]-6);
+            if(i == num_chs-1){
+                fprintf(output_fd, "AX%d", chs[i]-6);
+            }else{
+                fprintf(output_fd, "AX%d, ", chs[i]-6);
+            }
         }else{
-            fprintf(output_fd, "AI%d, ", chs[i]);
+            if(i == num_chs-1){
+                fprintf(output_fd, "AI%d", chs[i]);
+            }else{
+                fprintf(output_fd, "AI%d, ", chs[i]);
+            }
         }
         
     }
     fprintf(output_fd, "\n");
 }
 
-void ScientISST::writeFrameFile(Frame f){
-    fprintf(output_fd, "%d, %d, %d, %d, %d, \n", f.seq, f.digital[0], f.digital[1], f.digital[2], f.digital[3]);
+void ScientISST::writeFrameFile(FILE* fd, Frame f){
+    fprintf(fd, "%d, %d, %d, %d, %d, ", f.seq, f.digital[0], f.digital[1], f.digital[2], f.digital[3]);
 
     for(int i = 0; i < num_chs; i++){
-        fprintf(output_fd, "%d, ", f.a[i]);
+        if(i == num_chs-1){
+            fprintf(fd, "%d", f.a[chs[i]-1]);
+        }else{
+            fprintf(fd, "%d, ", f.a[chs[i]-1]);
+        }
     }
-    fprintf(output_fd, "\n");
+    fprintf(fd, "\n");
 }

@@ -13,19 +13,19 @@
 
 #define SIGNAL_FILENAME "performance.txt"
 
-#define API_MODE_SCIENTISST 1
-#define API_MODE_JSON 2
+#define API_MODE_SCIENTISST 2
+#define API_MODE_JSON 3
 
 #define ESP_STOP_LIVE_MODE -66
 
-#define AI1 0
-#define AI2 1
-#define AI3 2
-#define AI4 3
-#define AI5 4
-#define AI6 5
-#define AX1 6
-#define AX2 7
+#define AI1 1
+#define AI2 2
+#define AI3 3
+#define AI4 4
+#define AI5 5
+#define AI6 6
+#define AX1 7
+#define AX2 8
 
 /// The %ScientISST device class.
 class ScientISST
@@ -130,14 +130,16 @@ public:
     /** Starts a signal acquisition from the device.
         * \param[in] samplingRate Sampling rate in Hz. Accepted values are 1, 10, 100 or 1000 Hz. Default value is 1000 Hz.
         * \param[in] channels Set of channels to acquire. Accepted channels are 0...5 for inputs A1...A6.
-        * If this set is empty or if it is not given, all 6 analog channels will be acquired.
+        * If this set is empty or if it is not given, all 8 analog channels will be acquired.
+        * \param[in] file_name Name of the file where the live mode data will be written into.
         * \param[in] simulated If true, start in simulated mode. Otherwise start in live mode. Default is to start in live mode.
+        * \param[in] api The API mode, this API supports the ScientISST and JSON APIs.
         * \remarks This method cannot be called during an acquisition.
         * \exception Exception (Exception::DEVICE_NOT_IDLE)
         * \exception Exception (Exception::INVALID_PARAMETER)
         * \exception Exception (Exception::CONTACTING_DEVICE)
         */
-    void start(int samplingRate = 1000, const Vint &channels = Vint(), const char* file_name = "output.csv",  bool simulated = false, int api = API_MODE_SCIENTISST);
+    void start(int _sample_rate = 1000, const Vint &channels = Vint(), const char* file_name = "output.csv",  bool simulated = false, int api = API_MODE_SCIENTISST);
     
     /** Stops a signal acquisition.
         * \remarks This method must be called only during an acquisition.
@@ -200,7 +202,10 @@ public:
         */
     State state(void);
 
+    int sample_rate;
+
     void changeAPI(uint8_t api);
+    void writeFrameFile(FILE* fd, Frame f);
 
 private:
     void send(uint8_t* data, int len);
@@ -208,7 +213,6 @@ private:
     void close(void);
     int recv(void *data, int nbyttoread);
     void initFile(const char* file_name);
-    void writeFrameFile(Frame frame);
 
     int num_chs;
     int packet_size;
