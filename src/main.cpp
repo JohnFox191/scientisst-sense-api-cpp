@@ -73,12 +73,9 @@ int main(int argc, char **argv){
 
         puts("Connected to device. Press Enter to exit.");
 
-        std::string ver = dev.version();    // get device version string
-        printf("ScientISST version: %s\n", ver.c_str());
-
         //dev.battery(10);  // set battery threshold (optional)
 
-        dev.start(2000, {AI3}, argv[1], false, API_MODE_SCIENTISST);   // start acquisition of all channels at 1000 Hz
+        dev.start(100, {AI3}, argv[1], false, API_MODE_SCIENTISST);   // start acquisition of all channels at 1000 Hz
 
         //dev.trigger({true, false});                // To trigger digital outputs
 
@@ -87,6 +84,8 @@ int main(int argc, char **argv){
         }else{
             num_frames = 100;
         }
+
+        num_frames = dev.sample_rate;
 
         ScientISST::VFrame frames(num_frames); // initialize the frames vector with num_frames frames
         do{

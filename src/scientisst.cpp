@@ -41,6 +41,7 @@ void Sleep(int millisecs)
 #include "../ext/rapidjson/include/rapidjson/writer.h"
 #include "../ext/rapidjson/include/rapidjson/stringbuffer.h"
 
+
 /*****************************************************************************/
 
 // CRC4 check function
@@ -400,9 +401,14 @@ void ScientISST::changeAPI(uint8_t api){
 }
 
 /*****************************************************************************/
+void ScientISST::recvAdcConfig(void){
 
-std::string ScientISST::version(void){
+}
+/*****************************************************************************/
+
+void ScientISST::versionAndAdcChars(void){
     uint8_t cmd;
+    int size;
     if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
     
     const char *header = "ScientISST";
@@ -412,28 +418,45 @@ std::string ScientISST::version(void){
     cmd = 0x07;
     send(&cmd, 1);    // 0  0  0  0  0  1  1  1 - Send version string
     
-    std::string str;
-    while(1)
-    {
+    while(1){
         char chr;
-        if (recv(&chr, sizeof chr) != sizeof chr)    // a timeout has occurred
+        if (recv(&chr, sizeof(chr)) != sizeof(chr))    // a timeout has occurred
             throw Exception(Exception::CONTACTING_DEVICE);
 
-        const size_t len = str.size();
-        if (len >= headerLen)
-        {
-            if (chr == '\n')  return str;
-            str.push_back(chr);
+        const size_t len = firmware_version.size();
+        if (len >= headerLen){
+            if (chr == '\0'){
+                break;
+            }else if(chr != '\n'){
+                firmware_version.push_back(chr);
+            }
         }
         else
             if (chr == header[len])
-                str.push_back(chr);
+                firmware_version.push_back(chr);
             else
             {
-                str.clear();   // discard all data before version header
-                if (chr == header[0])   str.push_back(chr);
+                firmware_version.clear();   // discard all data before version header
+                if (chr == header[0])   firmware_version.push_back(chr);
             }
     }
+
+    if((size = recv(&adc1_chars, 6*sizeof(int))) != 6*sizeof(int)){    //We only want to recieve the 6 first ints of the adc1_chars struct (so, excluding the 2 last pointers)
+        throw Exception(Exception::CONTACTING_DEVICE);
+    }
+
+    //Initialize fields for lookup table if necessary
+    if (LUT_ENABLED && adc1_chars.atten == ADC_ATTEN_DB_11) {
+        adc1_chars.low_curve = (adc1_chars.adc_num == ADC_UNIT_1) ? lut_adc1_low : lut_adc2_low;
+        adc1_chars.high_curve = (adc1_chars.adc_num == ADC_UNIT_1) ? lut_adc1_high : lut_adc2_high;
+    } else {
+        adc1_chars.low_curve = NULL;
+        adc1_chars.high_curve = NULL;
+    }
+
+    printf("ScientISST version: %s\n", firmware_version.c_str());
+    printf("ScientISST Board Vref:%d\n", adc1_chars.vref);
+
 }
 
 int ScientISST::getPacketSize(){
@@ -513,8 +536,8 @@ int ScientISST::getPacketSize(){
 
 void ScientISST::start(int _sample_rate, const Vint &channels, const char* file_name, bool simulated, int api){
     uint8_t buffer[10];
+    uint32_t sr;
     uint16_t cmd;
-    uint32_t fs;
     char chMask;
 
     sample_rate = _sample_rate;
@@ -531,40 +554,15 @@ void ScientISST::start(int _sample_rate, const Vint &channels, const char* file_
 
     //Change API mode
     changeAPI(api);
+
+
+    versionAndAdcChars();    // get device version string and adc characteristics
+
     
-    switch (sample_rate){
-        case 1:
-            cmd = 0;
-            break;
-        case 10:
-            cmd = 0b001;
-            break;
-        case 100:
-            cmd = 0b010;
-            break;
-        case 1000:
-            cmd = 0b011;
-            break;
-
-        case 2000:
-            cmd = 0b100;
-            break;
-
-        case 4000:
-            cmd = 0b101;
-            break;
-
-        case 6000:
-            cmd = 0b110;
-            break;
-
-        case 8000:
-            cmd = 0b111;
-            break;
-
-        default:
-            throw Exception(Exception::INVALID_PARAMETER);
-    }
+    //Sample rate
+    sr = 0b01000011;
+    sr |= _sample_rate << 8;
+    send((uint8_t*)&sr, sizeof(sr));
     
     if(channels.empty()){
         chMask = 0xFF;    // all 8 analog channels
@@ -581,10 +579,6 @@ void ScientISST::start(int _sample_rate, const Vint &channels, const char* file_
             num_chs++;
         }
     }
-    
-    cmd <<= 6;
-    cmd |= 0b11;
-    send((uint8_t*)&cmd, sizeof(cmd));
     
     //Cleanup existing data in bluetooth socket
     while(recv(buffer, 1) == 1);
@@ -881,23 +875,23 @@ int ScientISST::recv(void *data, int nbyttoread){
    readtimeout.tv_usec = 0;
 #endif
 
-   fd_set   readfds;
-   FD_ZERO(&readfds);
-   FD_SET(fd, &readfds);
+    fd_set   readfds;
+    FD_ZERO(&readfds);
+    FD_SET(fd, &readfds);
 
-   for(int n = 0; n < nbyttoread;){
-      int state = select(FD_SETSIZE, &readfds, NULL, NULL, &readtimeout);
-      if(state < 0)	 throw Exception(Exception::CONTACTING_DEVICE);
+    for(int n = 0; n < nbyttoread;){
+        int state = select(FD_SETSIZE, &readfds, NULL, NULL, &readtimeout);
+        if(state < 0)	 throw Exception(Exception::CONTACTING_DEVICE);
 
-      if (state == 0)   return ESP_STOP_LIVE_MODE;   // a timeout occurred
+        if (state == 0)   return ESP_STOP_LIVE_MODE;   // a timeout occurred
 
-      ssize_t ret = ::read(fd, (char *) data+n, nbyttoread-n);
+        ssize_t ret = ::read(fd, (char *) data+n, nbyttoread-n);
 
-      if(ret <= 0)   throw Exception(Exception::CONTACTING_DEVICE);
-      n += ret;
-   }
+        if(ret <= 0)   throw Exception(Exception::CONTACTING_DEVICE);
+        n += ret;
+    }
 
-   return nbyttoread;
+    return nbyttoread;
 }
 
 /*****************************************************************************/
@@ -922,8 +916,6 @@ void ScientISST::close(void){
 /*****************************************************************************/
 
 void ScientISST::initFile(const char* file_name){
-    char aux[100];
-
     output_fd = fopen(file_name, "w");
     if(output_fd == NULL){
         printf("Output file cannot be opened.");
@@ -956,9 +948,9 @@ void ScientISST::writeFrameFile(FILE* fd, Frame f){
 
     for(int i = 0; i < num_chs; i++){
         if(i == num_chs-1){
-            fprintf(fd, "%d", f.a[chs[i]-1]);
+            fprintf(fd, "%d", esp_adc_cal_raw_to_voltage(f.a[chs[i]-1], &adc1_chars));
         }else{
-            fprintf(fd, "%d, ", f.a[chs[i]-1]);
+            fprintf(fd, "%d, ", esp_adc_cal_raw_to_voltage(f.a[chs[i]-1], &adc1_chars));
         }
     }
     fprintf(fd, "\n");

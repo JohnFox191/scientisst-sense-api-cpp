@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include "esp_adc.h"
 
 #ifdef _WIN32 // 32-bit or 64-bit Windows
 
@@ -120,12 +121,12 @@ public:
     /// Disconnects from a %ScientISST device. If an aquisition is running, it is stopped. 
     ~ScientISST();
 
-    /** Returns the device firmware version string.
+    /** Gets the device firmware version string and the adc characteristics.
         * \remarks This method cannot be called during an acquisition.
         * \exception Exception (Exception::DEVICE_NOT_IDLE)
         * \exception Exception (Exception::CONTACTING_DEVICE)
         */
-    std::string version(void);
+    void versionAndAdcChars(void);
     
     /** Starts a signal acquisition from the device.
         * \param[in] samplingRate Sampling rate in Hz. Accepted values are 1, 10, 100 or 1000 Hz. Default value is 1000 Hz.
@@ -203,6 +204,7 @@ public:
     State state(void);
 
     int sample_rate;
+    std::string firmware_version;
 
     void changeAPI(uint8_t api);
     void writeFrameFile(FILE* fd, Frame f);
@@ -213,12 +215,14 @@ private:
     void close(void);
     int recv(void *data, int nbyttoread);
     void initFile(const char* file_name);
+    void recvAdcConfig(void);
 
     int num_chs;
     int packet_size;
     int api_mode;
     FILE* output_fd;
     int chs[8];
+    esp_adc_cal_characteristics_t adc1_chars;
 
 #ifdef _WIN32
     SOCKET	fd;
