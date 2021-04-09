@@ -2,3 +2,4 @@
 build/
 scientisst
 .vscode/
+*.csv
