@@ -76,17 +76,17 @@ int main(int argc, char **argv){
         //dev.battery(10);  // set battery threshold (optional)
 
         // use block below if your compiler doesn't support vector initializer lists
-        ScientISST::Vint chans;
+        /*ScientISST::Vint chans;
         chans.push_back(AI1);
         chans.push_back(AI2);
         chans.push_back(AI3);
         chans.push_back(AI4);
         chans.push_back(AI5);
         chans.push_back(AI6);
-        dev.start(100, chans, argv[1], false, API_MODE_SCIENTISST);
+        dev.start(100, chans, argv[1], false, API_MODE_SCIENTISST);*/
         
 
-        //dev.start(100, {AI3}, argv[1], false, API_MODE_SCIENTISST);
+        dev.start(100, {AI3}, argv[1], false, API_MODE_SCIENTISST);
 
         //dev.trigger({true, false});                // To trigger digital outputs
 
