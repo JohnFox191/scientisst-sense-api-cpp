@@ -11,6 +11,8 @@ The ScientISST SENSE C++ API
   - scientisst.cpp  : The scientisst class source file
 ```
 ## Dependencies
+
+### Linux
 - libbluetooth-dev
 
 ## Installing
