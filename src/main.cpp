@@ -75,9 +75,30 @@ int main(int argc, char **argv){
 
         //dev.battery(10);  // set battery threshold (optional)
 
-        dev.start(100, {AI3}, argv[1], false, API_MODE_SCIENTISST);   // start acquisition of all channels at 1000 Hz
+        // use block below if your compiler doesn't support vector initializer lists
+        ScientISST::Vint chans;
+        chans.push_back(AI1);
+        chans.push_back(AI2);
+        chans.push_back(AI3);
+        chans.push_back(AI4);
+        chans.push_back(AI5);
+        chans.push_back(AI6);
+        dev.start(100, chans, argv[1], false, API_MODE_SCIENTISST);
+        
+
+        //dev.start(100, {AI3}, argv[1], false, API_MODE_SCIENTISST);
 
         //dev.trigger({true, false});                // To trigger digital outputs
+
+        // use block below if your compiler doesn't support vector initializer lists
+        /*
+        ScientISST::Vbool outputs;
+        outputs.push_back(false);
+        outputs.push_back(false);
+        outputs.push_back(true);
+        outputs.push_back(false);
+        dev.trigger(outputs);
+        */
 
         if(dev.sample_rate <= 100){
             num_frames = 1;

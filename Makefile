@@ -1,8 +1,8 @@
 TARGET_EXEC ?=scientisst
 LDFLAGS = -lbluetooth
-CFLAGS = -std=c++11 -DHASBLUETOOTH -Wall
+CFLAGS = -DHASBLUETOOTH -Wall
 CC =g++
-
+#-std=c++11
 BUILD_DIR ?= ./build
 SRC_DIRS ?= ./src
 
