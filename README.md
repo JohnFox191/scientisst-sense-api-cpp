@@ -10,6 +10,9 @@ The ScientISST SENSE C++ API
   - main.cpp        : A test example source file that uses the scientisst class to perform a live mode acquisition
   - scientisst.cpp  : The scientisst class source file
 ```
+## Dependencies
+- libbluetooth-dev
+
 ## Installing
 ```sh
 # Getting this repository 
