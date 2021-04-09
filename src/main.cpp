@@ -86,27 +86,15 @@ int main(int argc, char **argv){
         dev.start(100, chans, argv[1], false, API_MODE_SCIENTISST);*/
         
 
-        dev.start(100, {AI3}, argv[1], false, API_MODE_SCIENTISST);
-
         //dev.trigger({true, false});                // To trigger digital outputs
 
-        // use block below if your compiler doesn't support vector initializer lists
-        /*
-        ScientISST::Vbool outputs;
-        outputs.push_back(false);
-        outputs.push_back(false);
-        outputs.push_back(true);
-        outputs.push_back(false);
-        dev.trigger(outputs);
-        */
+        dev.start(5000, {AI3}, argv[1], false, API_MODE_SCIENTISST);
 
-        if(dev.sample_rate <= 100){
+        if(dev.sample_rate == 1){
             num_frames = 1;
         }else{
-            num_frames = 100;
+            num_frames = dev.sample_rate/5;
         }
-
-        num_frames = dev.sample_rate;
 
         ScientISST::VFrame frames(num_frames); // initialize the frames vector with num_frames frames
         do{

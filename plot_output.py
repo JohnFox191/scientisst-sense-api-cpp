@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.fft import fft, fftfreq
     
 signal = pd.read_csv('output.csv')
 

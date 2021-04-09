@@ -3,3 +3,4 @@ build/
 scientisst
 .vscode/
 *.csv
+*.py
