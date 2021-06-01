@@ -456,6 +456,7 @@ void ScientISST::versionAndAdcChars(void){
 
     printf("ScientISST version: %s\n", firmware_version.c_str());
     printf("ScientISST Board Vref:%d\n", adc1_chars.vref);
+    printf("ScientISST Board ADC Attenuation Mode:%d\n", adc1_chars.atten);
 
 }
 
@@ -473,7 +474,7 @@ int ScientISST::getPacketSize(){
 
     for(int i = 0; i < num_chs; i++){
         //Add 24bit channel's contributuion to packet size
-        if(chs[i] == 6 || chs[i] == 7){
+        if(chs[i] == AX1 || chs[i] == AX2){
             num_extern_active_chs++;
         
         //Count 12bit channels
@@ -483,6 +484,7 @@ int ScientISST::getPacketSize(){
     } 
 
     if(api_mode == API_MODE_SCIENTISST){       
+        //Add 24bit channel's contributuion to packet size
         _packet_size = 3*num_extern_active_chs;
 
         //Add 12bit channel's contributuion to packet size 
@@ -528,7 +530,8 @@ int ScientISST::getPacketSize(){
 
         _packet_size = strlen(buffer.GetString())+1;
     }
-    
+
+    printf("%d\n", _packet_size);
     return _packet_size;
 }
 
@@ -622,6 +625,7 @@ int ScientISST::read(VFrame &frames){
     char memb_name[50];
     int curr_ch;
     char* junk;
+    int byte_it = 0;
 
     if (num_chs == 0)   throw Exception(Exception::DEVICE_NOT_IN_ACQUISITION);
 
@@ -633,7 +637,9 @@ int ScientISST::read(VFrame &frames){
             printf("Esp stopped sending frames -> It stopped live mode on its own \n(probably because it can't handle this number of channels + sample rate)\n");
             return ESP_STOP_LIVE_MODE;
         }
-
+        if(!checkCRC4(buffer, packet_size)){
+            printf("checkCRC4 ERROR\n");
+        }
         while (!checkCRC4(buffer, packet_size)){  // if CRC check failed, try to resynchronize with the next valid frame
             // checking with one new byte at a time
             memmove(buffer, buffer+1, packet_size-1);
@@ -643,29 +649,33 @@ int ScientISST::read(VFrame &frames){
         Frame &f = *it;
 
         if(api_mode == API_MODE_SCIENTISST){
+            byte_it = 0;
+
             //Get seq number and IO states
             f.seq = buffer[packet_size-1] >> 4;
             for(int i = 0; i < 4; i++)
                 f.digital[i] = ((buffer[packet_size-2] & (0x80 >> i)) != 0);
 
             //Get channel values
-            for(int i = 0; i < num_chs;){
+            for(int i = 0; i < num_chs; i++){
                 curr_ch = chs[num_chs-1-i];
+
+                //printf("%d\n", *(uint16_t*)(buffer+0) & 0xFFF);
                 
                 //If it's an AX channel
                 if(curr_ch == AX1 || curr_ch == AX2){
-                    f.a[curr_ch] = *(uint32_t*)(buffer+i) & 0xFFFFFF;
-                    i += 3;
+                    f.a[curr_ch] = *(uint32_t*)(buffer+byte_it) & 0xFFFFFF;
+                    byte_it += 3;
 
                 //If it's an AI channel
                 }else{
                     if(!mid_frame_flag){
-                        f.a[curr_ch-1] = *(uint16_t*)(buffer+i) & 0xFFF;
-                        i++;
+                        f.a[curr_ch] = *(uint16_t*)(buffer+byte_it) & 0xFFF;
+                        byte_it++;
                         mid_frame_flag = 1;
                     }else{
-                        f.a[curr_ch-1] = *(uint16_t*)(buffer+i) >> 4;
-                        i += 2;
+                        f.a[curr_ch] = *(uint16_t*)(buffer+byte_it) >> 4;
+                        byte_it += 2;
                         mid_frame_flag = 0;
                     }
                 }
@@ -676,7 +686,7 @@ int ScientISST::read(VFrame &frames){
 
             f.seq = 1;
 
-            for(int i = 0; i < num_chs; i++){
+            for(int i = 1; i < num_chs+1; i++){
                 sprintf(memb_name, "AI%d", chs[i]);
                 f.a[i] = strtol(d[memb_name].GetString(), &junk, 10);
             }
@@ -686,6 +696,7 @@ int ScientISST::read(VFrame &frames){
             f.digital[2] = strtol(d["O1"].GetString(), &junk, 10);
             f.digital[3] = strtol(d["O2"].GetString(), &junk, 10);
         }
+        //printf("%d\n", f.a[0]);
         writeFrameFile(output_fd, f);
     }
 
@@ -933,9 +944,9 @@ void ScientISST::initFile(const char* file_name){
             }
         }else{
             if(i == num_chs-1){
-                fprintf(output_fd, "AI%d", chs[i]);
+                fprintf(output_fd, "AI%d [raw], AI%d [mV]", chs[i], chs[i]);
             }else{
-                fprintf(output_fd, "AI%d, ", chs[i]);
+                fprintf(output_fd, "AI%d [raw], AI%d [mV], ", chs[i], chs[i]);
             }
         }
         
@@ -943,14 +954,19 @@ void ScientISST::initFile(const char* file_name){
     fprintf(output_fd, "\n");
 }
 
+#define VOLT_DIVIDER_FACTOR 3.3985
+
 void ScientISST::writeFrameFile(FILE* fd, Frame f){
     fprintf(fd, "%d, %d, %d, %d, %d, ", f.seq, f.digital[0], f.digital[1], f.digital[2], f.digital[3]);
 
     for(int i = 0; i < num_chs; i++){
+        int channel_value_mV = esp_adc_cal_raw_to_voltage(f.a[chs[i]], &adc1_chars)*VOLT_DIVIDER_FACTOR;
+        
+        
         if(i == num_chs-1){
-            fprintf(fd, "%d", esp_adc_cal_raw_to_voltage(f.a[chs[i]-1], &adc1_chars));
+            fprintf(fd, "%d, %d", f.a[chs[i]], channel_value_mV);
         }else{
-            fprintf(fd, "%d, ", esp_adc_cal_raw_to_voltage(f.a[chs[i]-1], &adc1_chars));
+            fprintf(fd, "%d, %d, ", f.a[chs[i]], channel_value_mV);
         }
     }
     fprintf(fd, "\n");

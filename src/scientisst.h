@@ -221,7 +221,7 @@ private:
     int packet_size;
     int api_mode;
     FILE* output_fd;
-    int chs[8];
+    int chs[AX2+1];
     esp_adc_cal_characteristics_t adc1_chars;
 
 #ifdef _WIN32
