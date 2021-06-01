@@ -37,8 +37,8 @@ bool keypressed(void)
 int main(int argc, char **argv){
     int num_frames = 0;
 
-    if(argc != 2){
-        printf("Arguments Error.\nExample usage: \"scientisst output.csv\"\n");
+    if(argc != 3){
+        printf("Arguments Error.\nExample usage: \"scientisst <device> <filename.csv>\"\n");
         return -1;
     }
 
@@ -51,13 +51,15 @@ int main(int argc, char **argv){
     try{
         // uncomment this block to search for Bluetooth devices (Windows and Linux)
         /*
-        ScientISST::VDevInfo devs = ScientISST::find();   
+        ScientISST::VDevInfo devs = ScientISST::find();
         for(int i = 0; i < devs.size(); i++)
             printf("%s - %s\n", devs[i].macAddr.c_str(), devs[i].name.c_str());
         return 0;
         */
 
-        puts("Connecting to device...");
+        printf("Connecting to device - %s\n",argv[1]);
+
+        ScientISST dev(argv[1]); // connect to device provided
 
         // use one of the lines below
         //ScientISST dev("30:AE:A4:05:62:86");  // devkit
@@ -69,10 +71,10 @@ int main(int argc, char **argv){
         //ScientISST dev("COM5");  // Bluetooth virtual COM port or USB-UART COM port (Windows)
 
         //ScientISST dev("/dev/ttyUSB0");  // USB-UART device (Linux)
-        //ScientISST dev("/dev/rfcomm0");  // Bluetooth virtual serial port (Linux) 
+        //ScientISST dev("/dev/rfcomm0");  // Bluetooth virtual serial port (Linux)
 
         //ScientISST dev("/dev/tty.usbserial-A1000QIz");  // USB-UART device (Mac OS)
-        //ScientISST dev("/dev/tty.scientisst-DevB");  // Bluetooth virtual serial port (Mac OS) 
+        //ScientISST dev("/dev/tty.scientisst-DevB");  // Bluetooth virtual serial port (Mac OS)
 
         puts("Connected to device. Press Enter to exit.");
 
@@ -87,7 +89,7 @@ int main(int argc, char **argv){
         chans.push_back(AI5);
         chans.push_back(AI6);
         dev.start(100, chans, argv[1], false, API_MODE_SCIENTISST);*/
-        
+
 
         //dev.trigger({true, false});                // To trigger digital outputs
 
@@ -99,15 +101,15 @@ int main(int argc, char **argv){
             num_frames = dev.sample_rate/5;
         }
 
-        ScientISST::VFrame frames(num_frames); // initialize the frames vector with num_frames frames
+        ScientISST::VFrame frames(num_frames);  // initialize the frames vector with num_frames frames
         do{
-            dev.read(frames); // get num_frames frames from device
-            const ScientISST::Frame &f = frames[0];  // get a reference to the first frame of each num_frames frames block
+            dev.read(frames);  // get num_frames frames from device
+            const ScientISST::Frame &f = frames[0];   // get a reference to the first frame of each num_frames frames block
             dev.writeFrameFile(stdout, f);
 
-        }while(!keypressed()); // until a key is pressed
+        }while(!keypressed());  // until a key is pressed
 
-        dev.stop(); // stop acquisition
+        dev.stop();  // stop acquisition
     } // dev is destroyed here (it goes out of scope)
     catch(ScientISST::Exception &e){
         printf("ScientISST exception: %s\n", e.getDescription());
