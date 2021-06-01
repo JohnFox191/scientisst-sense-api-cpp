@@ -64,7 +64,7 @@ int main(int argc, char **argv){
         // use one of the lines below
         //ScientISST dev("30:AE:A4:05:62:86");  // devkit
         //ScientISST dev("AC:67:B2:1E:82:EE");  //ScientISST Sense 1.0
-        ScientISST dev("4C:11:AE:88:82:82");    //ScientISST Sense 1.1
+        //ScientISST dev("4C:11:AE:88:82:82");    //ScientISST Sense 1.1
         //ScientISST dev("AC:67:B2:1E:83:1A");    //ScientISST Sense 1.0 prof
         
 
@@ -93,7 +93,7 @@ int main(int argc, char **argv){
 
         //dev.trigger({true, false});                // To trigger digital outputs
 
-        dev.start(100, {AI1, AI2, AI3, AI4, AI5, AI6}, argv[1], false, API_MODE_SCIENTISST);
+        dev.start(100, {AI1, AI2, AI3, AI4, AI5, AI6}, argv[2], false, API_MODE_SCIENTISST);
 
         if(dev.sample_rate == 1){
             num_frames = 1;
