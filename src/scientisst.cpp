@@ -575,7 +575,7 @@ void ScientISST::start(int _sample_rate, const Vint &channels, const char* file_
         for(Vint::const_iterator it = channels.begin(); it != channels.end(); it++){
             int ch = *it;
             chs[num_chs] = ch;        //Fill chs vector
-            if (ch < 0 || ch > 8)   throw Exception(Exception::INVALID_PARAMETER);
+            if (ch <= 0 || ch > 8)   throw Exception(Exception::INVALID_PARAMETER);
             const char mask = 1 << (ch-1);
             if (chMask & mask)   throw Exception(Exception::INVALID_PARAMETER);
             chMask |= mask;

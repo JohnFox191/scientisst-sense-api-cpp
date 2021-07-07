@@ -130,7 +130,7 @@ public:
     
     /** Starts a signal acquisition from the device.
         * \param[in] samplingRate Sampling rate in Hz. Accepted values are 1, 10, 100 or 1000 Hz. Default value is 1000 Hz.
-        * \param[in] channels Set of channels to acquire. Accepted channels are 0...5 for inputs A1...A6.
+        * \param[in] channels Set of channels to acquire. Accepted channels are 1...6 for inputs A1...A6.
         * If this set is empty or if it is not given, all 8 analog channels will be acquired.
         * \param[in] file_name Name of the file where the live mode data will be written into.
         * \param[in] simulated If true, start in simulated mode. Otherwise start in live mode. Default is to start in live mode.
