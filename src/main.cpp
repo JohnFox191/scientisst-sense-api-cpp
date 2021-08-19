@@ -66,6 +66,7 @@ int main(int argc, char **argv){
         //ScientISST dev("AC:67:B2:1E:82:EE");  //ScientISST Sense 1.0
         //ScientISST dev("4C:11:AE:88:82:82");    //ScientISST Sense 1.1
         //ScientISST dev("AC:67:B2:1E:83:1A");    //ScientISST Sense 1.0 prof
+        //08:3A:F2:49:AB:D6 nova 
         
 
         //ScientISST dev("COM5");  // Bluetooth virtual COM port or USB-UART COM port (Windows)
@@ -93,7 +94,7 @@ int main(int argc, char **argv){
 
         //dev.trigger({true, false});                // To trigger digital outputs
 
-        dev.start(100, {AI1, AI2, AI3, AI4, AI5, AI6}, argv[2], false, API_MODE_SCIENTISST);
+        dev.start(16000, {AI1}, argv[2], false, API_MODE_SCIENTISST);
 
         if(dev.sample_rate == 1){
             num_frames = 1;

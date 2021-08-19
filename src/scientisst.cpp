@@ -954,16 +954,26 @@ void ScientISST::initFile(const char* file_name){
     fprintf(output_fd, "\n");
 }
 
-#define VOLT_DIVIDER_FACTOR 3.3985
+#define VOLT_DIVIDER_FACTOR 3.399
 
 void ScientISST::writeFrameFile(FILE* fd, Frame f){
+    int channel_value_mV;
+
     fprintf(fd, "%d, %d, %d, %d, %d, ", f.seq, f.digital[0], f.digital[1], f.digital[2], f.digital[3]);
 
     for(int i = 0; i < num_chs; i++){
-        int channel_value_mV = esp_adc_cal_raw_to_voltage(f.a[chs[i]], &adc1_chars)*VOLT_DIVIDER_FACTOR;
+        if(chs[i] == AX1 || chs[i] == AX2){
+            int32_t aux;
+            aux = (int32_t)f.a[chs[i]] << 8;
+            aux = aux >> 8;
+            channel_value_mV = aux;
+        }else{
+            channel_value_mV = esp_adc_cal_raw_to_voltage(f.a[chs[i]], &adc1_chars)*VOLT_DIVIDER_FACTOR;
+        }
         
         
-        if(i == num_chs-1){
+        
+        if(i == num_chs-1){ 
             fprintf(fd, "%d, %d", f.a[chs[i]], channel_value_mV);
         }else{
             fprintf(fd, "%d, %d, ", f.a[chs[i]], channel_value_mV);

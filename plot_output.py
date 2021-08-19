@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 signal = pd.read_csv('output.csv')
 
 for channel in signal.columns[5:]:
-    
+    print(signal[channel])
     plt.figure()
     plt.plot((signal[channel]))
     plt.title(channel)
