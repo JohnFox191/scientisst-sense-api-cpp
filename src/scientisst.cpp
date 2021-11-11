@@ -978,6 +978,11 @@ void ScientISST::writeFrameFile(FILE* fd, Frame f){
         }else{
             fprintf(fd, "%d, %d, ", f.a[chs[i]], channel_value_mV);
         }
+        /*if(i == num_chs-1){ 
+            fprintf(fd, "%d", f.a[chs[i]]);
+        }else{
+            fprintf(fd, "%d, ", f.a[chs[i]]);
+        }*/
     }
     fprintf(fd, "\n");
 }
