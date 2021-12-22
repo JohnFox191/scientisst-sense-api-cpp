@@ -94,7 +94,7 @@ int main(int argc, char **argv){
 
         //dev.trigger({true, false});                // To trigger digital outputs
 
-        dev.start(100, {AI1, AI2, AI3, AI4, AI5, AI6}, argv[2], false, API_MODE_SCIENTISST);
+        dev.start(100, {AI1}, argv[2], false, API_MODE_SCIENTISST);
 
         if(dev.sample_rate == 1){
             num_frames = 1;

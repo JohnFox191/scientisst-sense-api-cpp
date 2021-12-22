@@ -401,10 +401,6 @@ void ScientISST::changeAPI(uint8_t api){
 }
 
 /*****************************************************************************/
-void ScientISST::recvAdcConfig(void){
-
-}
-/*****************************************************************************/
 
 void ScientISST::versionAndAdcChars(void){
     uint8_t cmd;
@@ -418,11 +414,16 @@ void ScientISST::versionAndAdcChars(void){
     cmd = 0x07;
     send(&cmd, 1);    // 0  0  0  0  0  1  1  1 - Send version string
     
+    int bytes_read = 0;
     while(1){
         char chr;
-        if (recv(&chr, sizeof(chr)) != sizeof(chr))    // a timeout has occurred
-            throw Exception(Exception::CONTACTING_DEVICE);
 
+        if (recv(&chr, sizeof(chr)) != sizeof(chr)){        // a timeout has occurred
+            printf("RIP\n");
+            throw Exception(Exception::CONTACTING_DEVICE);
+        }
+        bytes_read++;
+            
         const size_t len = firmware_version.size();
         if (len >= headerLen){
             if (chr == '\0'){
@@ -430,18 +431,18 @@ void ScientISST::versionAndAdcChars(void){
             }else if(chr != '\n'){
                 firmware_version.push_back(chr);
             }
-        }
-        else
-            if (chr == header[len])
+        }else{
+            if(chr == header[len]){
                 firmware_version.push_back(chr);
-            else
-            {
+            }else{
                 firmware_version.clear();   // discard all data before version header
                 if (chr == header[0])   firmware_version.push_back(chr);
             }
+        }
     }
 
-    if((size = recv(&adc1_chars, 6*sizeof(int))) != 6*sizeof(int)){    //We only want to recieve the 6 first ints of the adc1_chars struct (so, excluding the 2 last pointers)
+    if((size = recv(&adc1_chars, 6*sizeof(uint32_t))) != 6*sizeof(uint32_t)){    //We only want to recieve the 6 first ints of the adc1_chars struct (so, excluding the 2 last pointers)
+        printf("RIP, expected 24bytes and recieved %d bytes\n", size);
         throw Exception(Exception::CONTACTING_DEVICE);
     }
 
@@ -846,9 +847,10 @@ void ScientISST::send(uint8_t* data, int len){
             throw Exception(Exception::CONTACTING_DEVICE);
    
 #else // Linux or Mac OS
-
-   if(write(fd, data, len) != len)
+    if(write(fd, data, len) != len){
         throw Exception(Exception::CONTACTING_DEVICE);
+    }
+
 #endif
 }
 
@@ -892,13 +894,19 @@ int ScientISST::recv(void *data, int nbyttoread){
 
     for(int n = 0; n < nbyttoread;){
         int state = select(FD_SETSIZE, &readfds, NULL, NULL, &readtimeout);
-        if(state < 0)	 throw Exception(Exception::CONTACTING_DEVICE);
+        if(state < 0){
+            throw Exception(Exception::CONTACTING_DEVICE);
+        }
+        
 
         if (state == 0)   return ESP_STOP_LIVE_MODE;   // a timeout occurred
 
         ssize_t ret = ::read(fd, (char *) data+n, nbyttoread-n);
 
-        if(ret <= 0)   throw Exception(Exception::CONTACTING_DEVICE);
+        if(ret <= 0){
+            throw Exception(Exception::CONTACTING_DEVICE);
+        }
+        
         n += ret;
     }
 
