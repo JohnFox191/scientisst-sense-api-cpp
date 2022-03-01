@@ -25,5 +25,5 @@ git clone https://github.com/scientisst/scientisst-sense-api-cpp.git --recursive
 ```sh
 cd scientisst-sense-api-cpp
 # Example usage
-./scientisst 4C:11:AE:88:84:5A output.csv
+./scientisst E8:9F:6D:D2:1F:5E output.csv
 ```

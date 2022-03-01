@@ -40,6 +40,8 @@ void Sleep(int millisecs)
 #include "../ext/rapidjson/include/rapidjson/document.h"
 #include "../ext/rapidjson/include/rapidjson/writer.h"
 #include "../ext/rapidjson/include/rapidjson/stringbuffer.h"
+#include "tcp.h"
+#include "udp.h"
 
 
 /*****************************************************************************/
@@ -290,84 +292,108 @@ ScientISST::ScientISST(const char *address) : num_chs(0){
 
 #else // Linux or Mac OS
 
-   if (memcmp(address, "/dev/", 5) == 0)
-   {   
-      fd = open(address, O_RDWR | O_NOCTTY | O_NDELAY);
-      if (fd < 0)
-		   throw Exception(Exception::PORT_COULD_NOT_BE_OPENED);
-      
-      if (fcntl(fd, F_SETFL, 0) == -1)  // remove the O_NDELAY flag
-      {
-         close();
-		   throw Exception(Exception::PORT_INITIALIZATION);
-      }
-   
-      termios term;
-      if (tcgetattr(fd, &term) != 0)
-      {
-         close();
-		   throw Exception(Exception::PORT_INITIALIZATION);
-      }
-   
-      cfmakeraw(&term);
-      term.c_oflag &= ~(OPOST);
-   
-      term.c_cc[VMIN] = 1;
-      term.c_cc[VTIME] = 1;
-   
-      term.c_iflag &= ~(INPCK | PARMRK | ISTRIP | IGNCR | ICRNL | INLCR | IXON | IXOFF | IMAXBEL); // no flow control
-      term.c_iflag |= (IGNPAR | IGNBRK);
-   
-      term.c_cflag &= ~(CRTSCTS | PARENB | CSTOPB | CSIZE); // no parity, 1 stop bit
-      term.c_cflag |= (CLOCAL | CREAD | CS8);    // raw mode, 8 bits
-   
-      term.c_lflag &= ~(ICANON | ECHO | ECHOE | ECHOPRT | ECHOK | ECHOKE | ECHONL | ECHOCTL | ISIG | IEXTEN | TOSTOP);  // raw mode
-   
-      if (cfsetspeed(&term, B115200) != 0)
-      {
-         close();
-		   throw Exception(Exception::PORT_INITIALIZATION);
-      }
-   
-      if (tcsetattr(fd, TCSANOW, &term) != 0)
-      {
-         close();
-		   throw Exception(Exception::PORT_INITIALIZATION);
-      }
+    if (memcmp(address, "/dev/", 5) == 0)
+    {   
+        fd = open(address, O_RDWR | O_NOCTTY | O_NDELAY);
+        if (fd < 0)
+            throw Exception(Exception::PORT_COULD_NOT_BE_OPENED);
+        
+        if (fcntl(fd, F_SETFL, 0) == -1)  // remove the O_NDELAY flag
+        {
+            close();
+            throw Exception(Exception::PORT_INITIALIZATION);
+        }
+    
+        termios term;
+        if (tcgetattr(fd, &term) != 0)
+        {
+            close();
+            throw Exception(Exception::PORT_INITIALIZATION);
+        }
+    
+        cfmakeraw(&term);
+        term.c_oflag &= ~(OPOST);
+    
+        term.c_cc[VMIN] = 1;
+        term.c_cc[VTIME] = 1;
+    
+        term.c_iflag &= ~(INPCK | PARMRK | ISTRIP | IGNCR | ICRNL | INLCR | IXON | IXOFF | IMAXBEL); // no flow control
+        term.c_iflag |= (IGNPAR | IGNBRK);
+    
+        term.c_cflag &= ~(CRTSCTS | PARENB | CSTOPB | CSIZE); // no parity, 1 stop bit
+        term.c_cflag |= (CLOCAL | CREAD | CS8);    // raw mode, 8 bits
+    
+        term.c_lflag &= ~(ICANON | ECHO | ECHOE | ECHOPRT | ECHOK | ECHOKE | ECHONL | ECHOCTL | ISIG | IEXTEN | TOSTOP);  // raw mode
+    
+        if (cfsetspeed(&term, B115200) != 0)
+        {
+            close();
+            throw Exception(Exception::PORT_INITIALIZATION);
+        }
+    
+        if (tcsetattr(fd, TCSANOW, &term) != 0)
+        {
+            close();
+            throw Exception(Exception::PORT_INITIALIZATION);
+        }
 
-      isTTY = true;
-   }
-   else // address is a Bluetooth MAC address
+        //isTTY = true;
+
+        com_mode = COM_MODE_UART;
+
+    //Setup as an Wifi server
+    }else if(memcmp(address, "server", 6) == 0){
+        char *port_str;
+
+        port_str = (char*)strrchr(address, ':')+1;  //+1 to remove the ':'
+        if(port_str == NULL){
+            printf("Error in reading server port number, example usage: ./scientisst server_tcp:25565\n");
+            exit(-1);
+        }
+
+        //Tcp server
+        if(memcmp(strrchr(address, '_')+1, "tcp", 3) == 0){
+            com_mode = COM_MODE_TCP_SV;
+            fd = initTcpServer(port_str);
+        //Udp server
+        }else if(memcmp(strrchr(address, '_')+1, "udp", 3) == 0){
+            com_mode = COM_MODE_UDP;
+            fd = initUdpServer(port_str, &client_addr, &client_addr_len);
+        }
+
+
+    }else // address is a Bluetooth MAC address
 #ifdef HASBLUETOOTH
-   {
-      sockaddr_rc so_bt;
-      so_bt.rc_family = AF_BLUETOOTH;
-      if (str2ba(address, &so_bt.rc_bdaddr) < 0)
-         throw Exception(Exception::INVALID_ADDRESS);
-         
-      so_bt.rc_channel = 1;
+    {
+        sockaddr_rc so_bt;
+        so_bt.rc_family = AF_BLUETOOTH;
+        if (str2ba(address, &so_bt.rc_bdaddr) < 0)
+            throw Exception(Exception::INVALID_ADDRESS);
+            
+        so_bt.rc_channel = 1;
 
-      fd = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
-      if (fd < 0)
-         throw Exception(Exception::PORT_INITIALIZATION);
+        fd = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
+        if (fd < 0)
+            throw Exception(Exception::PORT_INITIALIZATION);
 
-      if (connect(fd, (const sockaddr*)&so_bt, sizeof so_bt) != 0)
-      {
-         close();
-         throw Exception(Exception::PORT_COULD_NOT_BE_OPENED);
-      }
+        if (connect(fd, (const sockaddr*)&so_bt, sizeof so_bt) != 0)
+        {
+            close();
+            throw Exception(Exception::PORT_COULD_NOT_BE_OPENED);
+        }
 
-      isTTY = false;
-   }
+        //isTTY = false;
+        com_mode = COM_MODE_BT;
+    }
 #else
-      throw Exception(Exception::PORT_COULD_NOT_BE_OPENED);
+        throw Exception(Exception::PORT_COULD_NOT_BE_OPENED);
 #endif // HASBLUETOOTH
 
 #endif // Linux or Mac OS
 
-   api_mode =  API_MODE_SCIENTISST;
-   output_fd = NULL;
-
+    api_mode =  API_MODE_SCIENTISST;
+    output_fd = NULL;
+    bytes_to_read = 0;
 }
 
 /*****************************************************************************/
@@ -404,47 +430,39 @@ void ScientISST::changeAPI(uint8_t api){
 
 void ScientISST::versionAndAdcChars(void){
     uint8_t cmd;
-    int size;
-    if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
+    uint8_t buff[1024];
+    int rcv_bytes = 0;
+    uint8_t *firmware_str;  //Pointer to beginning of firmware string
+    int firmware_str_size;  //Size in bytes of firmware_str
+    uint8_t *adc_chars;     //Pointer to beginning of adc chars
+    int adc_chars_size;     //Size in bytes of adc_chars
     
-    const char *header = "ScientISST";
-    
-    const size_t headerLen = strlen(header);
 
+    if (num_chs != 0)   throw Exception(Exception::DEVICE_NOT_IDLE);
+        
     cmd = 0x07;
     send(&cmd, 1);    // 0  0  0  0  0  1  1  1 - Send version string
-    
-    int bytes_read = 0;
-    while(1){
-        char chr;
 
-        if (recv(&chr, sizeof(chr)) != sizeof(chr)){        // a timeout has occurred
-            printf("RIP\n");
-            throw Exception(Exception::CONTACTING_DEVICE);
-        }
-        bytes_read++;
-            
-        const size_t len = firmware_version.size();
-        if (len >= headerLen){
-            if (chr == '\0'){
-                break;
-            }else if(chr != '\n'){
-                firmware_version.push_back(chr);
-            }
-        }else{
-            if(chr == header[len]){
-                firmware_version.push_back(chr);
-            }else{
-                firmware_version.clear();   // discard all data before version header
-                if (chr == header[0])   firmware_version.push_back(chr);
-            }
-        }
-    }
-
-    if((size = recv(&adc1_chars, 6*sizeof(uint32_t))) != 6*sizeof(uint32_t)){    //We only want to recieve the 6 first ints of the adc1_chars struct (so, excluding the 2 last pointers)
-        printf("RIP, expected 24bytes and recieved %d bytes\n", size);
+    if((rcv_bytes = recv(&buff, sizeof(buff), 1)) < 0){
+        //A timeout has occurred
         throw Exception(Exception::CONTACTING_DEVICE);
     }
+    firmware_str = buff;
+    adc_chars = (uint8_t*)strrchr((char*)buff, '\0')+1;  //+1 to remove the '\0'
+    firmware_str_size = adc_chars-firmware_str;
+    adc_chars_size = rcv_bytes-firmware_str_size;
+    
+    //Put recieved firmware string into firmware_version
+    for(int i = 0; i < firmware_str_size; i++){
+        firmware_version.push_back(firmware_str[i]);
+    }
+
+    //Copy data of recieved adc chars into adc1_chars
+    if(adc_chars_size != 6*sizeof(uint32_t)){
+        printf("Error, recieved %dbytes, of which %dbytes are for adc_chars and was expecting %ldbytes\n", rcv_bytes, adc_chars_size, 6*sizeof(uint32_t));
+        throw Exception::INVALID_PARAMETER;
+    }
+    memcpy(&adc1_chars, adc_chars, adc_chars_size);
 
     //Initialize fields for lookup table if necessary
     if (LUT_ENABLED && adc1_chars.atten == ADC_ATTEN_DB_11) {
@@ -531,8 +549,6 @@ int ScientISST::getPacketSize(){
 
         _packet_size = strlen(buffer.GetString())+1;
     }
-
-    printf("%d\n", _packet_size);
     return _packet_size;
 }
 
@@ -543,6 +559,7 @@ void ScientISST::start(int _sample_rate, const Vint &channels, const char* file_
     uint32_t sr;
     uint16_t cmd;
     char chMask;
+    int num_frames = 0;
 
     sample_rate = _sample_rate;
     
@@ -584,14 +601,32 @@ void ScientISST::start(int _sample_rate, const Vint &channels, const char* file_
         }
     }
     
-    //Cleanup existing data in bluetooth socket
-    while(recv(buffer, 1) == 1);
+    //Cleanup existing data in stream socket
+    if(com_mode != COM_MODE_UDP){
+        while(recv(buffer, 1) == 1);
+    }
    
+    //Send live mode command with channels mask
     cmd = simulated ? 0x02 : 0x01;
     cmd |= chMask << 8;
     send((uint8_t*)&cmd, sizeof(cmd));
 
     packet_size = getPacketSize();
+
+    if(sample_rate > 100){
+        bytes_to_read = !(MAX_BUFFER_SIZE%packet_size) ? MAX_BUFFER_SIZE-packet_size : MAX_BUFFER_SIZE-(MAX_BUFFER_SIZE%packet_size);
+    }else{
+        bytes_to_read = packet_size;
+    }
+
+    if(bytes_to_read % packet_size){
+        printf("Error, bytes_to_read needs to be devisible by packet_size\n");
+        exit(EXIT_FAILURE);
+    }else{
+        num_frames = bytes_to_read/packet_size;
+    }
+
+    frames.resize(num_frames);  // resize the frames vector with num_frames frames
 
     //Open file and write header
     initFile(file_name);
@@ -619,8 +654,9 @@ void ScientISST::stop(void){
 
 /*****************************************************************************/
 
-int ScientISST::read(VFrame &frames){
-    unsigned char buffer[500];
+int ScientISST::read(){
+    unsigned char rcv_buff[1*1000*1000];
+    unsigned char *buffer;
     int mid_frame_flag = 0;
     rapidjson::Document d;
     char memb_name[50];
@@ -628,16 +664,19 @@ int ScientISST::read(VFrame &frames){
     char* junk;
     int byte_it = 0;
 
-    if (num_chs == 0)   throw Exception(Exception::DEVICE_NOT_IN_ACQUISITION);
+    if(num_chs == 0)   throw Exception(Exception::DEVICE_NOT_IN_ACQUISITION);
 
-    if (frames.empty())   frames.resize(100);
+    if(frames.empty()){
+        printf("frames is empty\n");
+        return -1;
+    }
 
+    recv(rcv_buff, bytes_to_read);
 
+    buffer = rcv_buff;
     for(VFrame::iterator it = frames.begin(); it != frames.end(); it++){
-        if(recv(buffer, packet_size) == ESP_STOP_LIVE_MODE ){
-            printf("Esp stopped sending frames -> It stopped live mode on its own \n(probably because it can't handle this number of channels + sample rate)\n");
-            return ESP_STOP_LIVE_MODE;
-        }
+        
+        
         if(!checkCRC4(buffer, packet_size)){
             printf("checkCRC4 ERROR\n");
         }
@@ -830,25 +869,48 @@ const char* ScientISST::Exception::getDescription(void)
 /*****************************************************************************/
 
 void ScientISST::send(uint8_t* data, int len){
-   Sleep(150);
+    uint8_t buff[CMD_MAX_BYTES];
+
+    Sleep(150);
+
+    if(len > CMD_MAX_BYTES){
+        printf("Error, trying to send a command (%d bytes) bigger than max allowed (%d bytes)\n", len, CMD_MAX_BYTES);
+        exit(-1);
+    }
+
+    memcpy(buff, data, len);
+
+    //It is important to always send a fixed amount of bytes with sockets
+    if(com_mode == COM_MODE_TCP_SV || com_mode == COM_MODE_TCP_CL || com_mode == COM_MODE_UDP){
+        len = CMD_MAX_BYTES;
+    }
 
 #ifdef _WIN32
     if (fd == INVALID_SOCKET)
     {
         DWORD nbytwritten = 0;
-        if (!WriteFile(hCom, data, len, &nbytwritten, NULL))
+        if (!WriteFile(hCom, buff, len, &nbytwritten, NULL))
             throw Exception(Exception::CONTACTING_DEVICE);
 
         if (nbytwritten != len)
             throw Exception(Exception::CONTACTING_DEVICE);
     }
-    else
-        if (::send(fd, data, len, 0) != len)
+    else{
+        if (::send(fd, buff, len, 0) != len)
             throw Exception(Exception::CONTACTING_DEVICE);
+    }
+
    
 #else // Linux or Mac OS
-    if(write(fd, data, len) != len){
-        throw Exception(Exception::CONTACTING_DEVICE);
+
+    if(com_mode != COM_MODE_UDP){
+        if(write(fd, buff, len) != len){
+            throw Exception(Exception::CONTACTING_DEVICE);
+        }
+    }else{
+        if (sendto(fd, buff, len, 0, (const struct sockaddr *) (&client_addr), client_addr_len) == -1) {
+            perror("ERROR: sendto");
+        }
     }
 
 #endif
@@ -856,7 +918,8 @@ void ScientISST::send(uint8_t* data, int len){
 
 /*****************************************************************************/
 
-int ScientISST::recv(void *data, int nbyttoread){
+int ScientISST::recv(void *data, int nbyttoread, uint8_t is_datagram){
+    int bytes_read = 0;
 #ifdef _WIN32
    if (fd == INVALID_SOCKET)
    {
@@ -884,7 +947,7 @@ int ScientISST::recv(void *data, int nbyttoread){
 
 #ifndef _WIN32 // Linux or Mac OS
    timeval  readtimeout;
-   readtimeout.tv_sec = 2;
+   readtimeout.tv_sec = 4;
    readtimeout.tv_usec = 0;
 #endif
 
@@ -892,25 +955,34 @@ int ScientISST::recv(void *data, int nbyttoread){
     FD_ZERO(&readfds);
     FD_SET(fd, &readfds);
 
-    for(int n = 0; n < nbyttoread;){
+    while(bytes_read < nbyttoread){
         int state = select(FD_SETSIZE, &readfds, NULL, NULL, &readtimeout);
         if(state < 0){
             throw Exception(Exception::CONTACTING_DEVICE);
         }
-        
 
-        if (state == 0)   return ESP_STOP_LIVE_MODE;   // a timeout occurred
+        if (state == 0){
+            printf("recv: Error, a timeout occured\n");
+            throw Exception(Exception::CONTACTING_DEVICE);
+        }
 
-        ssize_t ret = ::read(fd, (char *) data+n, nbyttoread-n);
+        ssize_t ret = ::read(fd, (char *)data+bytes_read, nbyttoread-bytes_read);
 
         if(ret <= 0){
+            printf("ScientISST did not send all bytes it was supposed to send. Recieved %d/%d (bytes)\n", bytes_read, nbyttoread);
             throw Exception(Exception::CONTACTING_DEVICE);
         }
         
-        n += ret;
+        bytes_read += ret;
+
+        //If it is a datagram, stop reading
+        if(is_datagram){
+            break;
+        }
     }
 
-    return nbyttoread;
+    //return nbyttoread;
+    return bytes_read;
 }
 
 /*****************************************************************************/

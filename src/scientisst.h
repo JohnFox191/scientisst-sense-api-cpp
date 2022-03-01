@@ -4,6 +4,12 @@
 
 #include <string>
 #include <vector>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h> 
+#include <unistd.h>
+#include <netdb.h>
 #include "esp_adc.h"
 
 #ifdef _WIN32 // 32-bit or 64-bit Windows
@@ -17,7 +23,14 @@
 #define API_MODE_SCIENTISST 2
 #define API_MODE_JSON 3
 
-#define ESP_STOP_LIVE_MODE -66
+#define COM_MODE_BT     0
+#define COM_MODE_UART   1
+#define COM_MODE_TCP_SV 2
+#define COM_MODE_TCP_CL 3
+#define COM_MODE_UDP    4
+
+#define CMD_MAX_BYTES   4                           //Max byte size of a command (currently it's the set sample rate command, which is 3 bytes)
+#define MAX_BUFFER_SIZE (5744)
 
 #define AI1 1
 #define AI2 2
@@ -28,7 +41,7 @@
 #define AX1 7
 #define AX2 8
 
-/// The %ScientISST device class.
+// The ScientISST device class.
 class ScientISST
 {
 public:
@@ -89,7 +102,7 @@ public:
             DEVICE_NOT_IDLE,           ///< The device is not idle
             DEVICE_NOT_IN_ACQUISITION, ///< The device is not in acquisition mode
             INVALID_PARAMETER,         ///< Invalid parameter
-            NOT_SUPPORTED,             ///< Operation not supported by the device 
+            NOT_SUPPORTED,             ///< Operation not supported by the device
         } code;  ///< %Exception code.
 
         Exception(Code c) : code(c) {}      ///< Exception constructor.
@@ -157,7 +170,7 @@ public:
         * \exception Exception (Exception::DEVICE_NOT_IN_ACQUISITION)
         * \exception Exception (Exception::CONTACTING_DEVICE)
         */   
-    int read(VFrame &frames);
+    int read();
     
     /** Sets the battery voltage threshold for the low-battery LED.
         * \param[in] value Battery voltage threshold. Default value is 0.
@@ -204,6 +217,8 @@ public:
     State state(void);
 
     int sample_rate;
+    int bytes_to_read;  //Bytes to read in each read
+    VFrame frames;     
     std::string firmware_version;
 
     void changeAPI(uint8_t api);
@@ -213,7 +228,7 @@ private:
     void send(uint8_t* data, int len);
     int getPacketSize();
     void close(void);
-    int recv(void *data, int nbyttoread);
+    int recv(void *data, int nbyttoread, uint8_t is_datagram=0);
     void initFile(const char* file_name);
     void recvAdcConfig(void);
 
@@ -224,13 +239,17 @@ private:
     int chs[AX2+1];
     esp_adc_cal_characteristics_t adc1_chars;
 
+    int com_mode;
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len;
+
 #ifdef _WIN32
     SOCKET	fd;
     timeval  readtimeout;
     HANDLE   hCom;
 #else // Linux or Mac OS
     int      fd;
-    bool     isTTY;
+    //bool     isTTY;
 #endif
 };
 

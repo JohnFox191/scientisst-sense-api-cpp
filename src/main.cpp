@@ -2,6 +2,7 @@
 #include "scientisst.h"
 #include <stdio.h>
 #include <unistd.h>
+#include <chrono>
 
 #ifdef _WIN32
 
@@ -35,8 +36,6 @@ bool keypressed(void)
 
 
 int main(int argc, char **argv){
-    int num_frames = 0;
-
     if(argc != 3){
         printf("Arguments Error.\nExample usage: \"scientisst <device> <filename.csv>\"\n");
         return -1;
@@ -57,7 +56,7 @@ int main(int argc, char **argv){
         return 0;
         */
 
-        printf("Connecting to device - %s\n",argv[1]);
+        printf("Connecting to device - %s\n", argv[1]);
 
         ScientISST dev(argv[1]); // connect to device provided
 
@@ -81,32 +80,21 @@ int main(int argc, char **argv){
 
         //dev.battery(10);  // set battery threshold (optional)
 
-        // use block below if your compiler doesn't support vector initializer lists
-        /*ScientISST::Vint chans;
-        chans.push_back(AI1);
-        chans.push_back(AI2);
-        chans.push_back(AI3);
-        chans.push_back(AI4);
-        chans.push_back(AI5);
-        chans.push_back(AI6);
-        dev.start(100, chans, argv[1], false, API_MODE_SCIENTISST);*/
-
-
         //dev.trigger({true, false});                // To trigger digital outputs
 
-        dev.start(100, {AI1}, argv[2], false, API_MODE_SCIENTISST);
+        dev.start(16000, {AI2}, argv[2], false, API_MODE_SCIENTISST);
 
-        if(dev.sample_rate == 1){
-            num_frames = 1;
-        }else{
-            num_frames = dev.sample_rate/5;
-        }
-
-        ScientISST::VFrame frames(num_frames);  // initialize the frames vector with num_frames frames
+        std::chrono::steady_clock::time_point time_last_printed = std::chrono::steady_clock::now();
         do{
-            dev.read(frames);  // get num_frames frames from device
-            const ScientISST::Frame &f = frames[0];   // get a reference to the first frame of each num_frames frames block
-            dev.writeFrameFile(stdout, f);
+            dev.read();  // get multiple frames from device
+            
+            //print a frame every 200ms
+            if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - time_last_printed).count() >= 200){
+                const ScientISST::Frame &f = dev.frames[0];   // get a reference to the first frame of each frames block
+                dev.writeFrameFile(stdout, f);
+                time_last_printed = std::chrono::steady_clock::now();
+            }
+
 
         }while(!keypressed());  // until a key is pressed
 
