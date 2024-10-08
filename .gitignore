@@ -4,3 +4,5 @@ scientisst
 .vscode/
 *.csv
 *.py
+/.vs
+/x64

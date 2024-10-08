@@ -1,6 +1,6 @@
 #ifdef _WIN32 // 32-bit or 64-bit Windows
 
-#define HASBLUETOOTH
+//#define HASBLUETOOTH
 
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
@@ -15,7 +15,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#ifdef HASBLUETOOTH  // Linux only
+/* #ifdef HASBLUETOOTH  // Linux only
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
@@ -24,7 +24,7 @@
 #include <stdlib.h>
 
 #endif // HASBLUETOOTH
-
+ */
 void Sleep(int millisecs)
 {
    usleep(millisecs*1000);
@@ -462,6 +462,7 @@ void ScientISST::versionAndAdcChars(void){
         printf("Error, recieved %dbytes, of which %dbytes are for adc_chars and was expecting %ldbytes\n", rcv_bytes, adc_chars_size, 6*sizeof(uint32_t));
         throw Exception::INVALID_PARAMETER;
     }
+    
     memcpy(&adc1_chars, adc_chars, adc_chars_size);
 
     //Initialize fields for lookup table if necessary
@@ -678,7 +679,7 @@ int ScientISST::read(){
         
         
         if(!checkCRC4(buffer, packet_size)){
-            printf("checkCRC4 ERROR\n");
+            //printf("checkCRC4 ERROR\n");
         }
         while (!checkCRC4(buffer, packet_size)){  // if CRC check failed, try to resynchronize with the next valid frame
             // checking with one new byte at a time
@@ -896,7 +897,7 @@ void ScientISST::send(uint8_t* data, int len){
             throw Exception(Exception::CONTACTING_DEVICE);
     }
     else{
-        if (::send(fd, buff, len, 0) != len)
+        if (::send(fd, (char*)buff, len, 0) != len)
             throw Exception(Exception::CONTACTING_DEVICE);
     }
 
@@ -922,7 +923,7 @@ int ScientISST::recv(void *data, int nbyttoread, uint8_t is_datagram){
     int bytes_read = 0;
 #ifdef _WIN32
    if (fd == INVALID_SOCKET)
-   {
+   {    
       for(int n = 0; n < nbyttoread;)
       {
          DWORD nbytread = 0;
@@ -935,7 +936,7 @@ int ScientISST::recv(void *data, int nbyttoread, uint8_t is_datagram){
             if (!GetCommModemStatus(hCom, &stat) || !(stat & MS_DSR_ON))
                throw Exception(Exception::CONTACTING_DEVICE);  // connection is lost
 
-            return ESP_STOP_LIVE_MODE;   // a timeout occurred
+            return n;   // a timeout occurred
          }
 
          n += nbytread;

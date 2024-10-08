@@ -1,12 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h> 
-#include <unistd.h>
-#include <netdb.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")  // Link with Winsock library
+#include <io.h>
+#include <stdint.h>
 #include "tcp.h"
 
 int initTcpServer(char* port_str){

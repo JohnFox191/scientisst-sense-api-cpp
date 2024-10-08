@@ -4,17 +4,19 @@
 
 #include <string>
 #include <vector>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h> 
-#include <unistd.h>
-#include <netdb.h>
+
 #include "esp_adc.h"
 
 #ifdef _WIN32 // 32-bit or 64-bit Windows
-
+#if defined(_MSC_VER)
+typedef intptr_t ssize_t;  // Define ssize_t as a signed pointer-sized integer
+#endif
 #include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")  // Link with Winsock library
+#include <io.h>
+#include <stdint.h>
+
 
 #endif
 

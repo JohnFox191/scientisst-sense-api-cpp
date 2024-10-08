@@ -1,11 +1,13 @@
 
 #include "scientisst.h"
 #include <stdio.h>
-#include <unistd.h>
+#include <io.h>
 #include <chrono>
 
 #ifdef _WIN32
-
+#if defined(_MSC_VER)
+typedef intptr_t ssize_t;  // Define ssize_t as a signed pointer-sized integer
+#endif
 #include <conio.h>
 
 bool keypressed(void)
@@ -82,14 +84,14 @@ int main(int argc, char **argv){
 
         //dev.trigger({true, false});                // To trigger digital outputs
 
-        dev.start(16000, {AI2}, argv[2], false, API_MODE_SCIENTISST);
+        dev.start(1000, { AI1}, argv[2], false, API_MODE_SCIENTISST);
 
         std::chrono::steady_clock::time_point time_last_printed = std::chrono::steady_clock::now();
         do{
             dev.read();  // get multiple frames from device
             
             //print a frame every 200ms
-            if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - time_last_printed).count() >= 200){
+            if(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - time_last_printed).count() >= 5){
                 const ScientISST::Frame &f = dev.frames[0];   // get a reference to the first frame of each frames block
                 dev.writeFrameFile(stdout, f);
                 time_last_printed = std::chrono::steady_clock::now();

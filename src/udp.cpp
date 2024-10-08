@@ -28,7 +28,7 @@ int initUdpServer(char* port_str, struct sockaddr_in *client_addr, socklen_t *cl
     }
 	printf("Binded port %d on all interfaces\n", port);
 
-    if(recvfrom(client_fd, buff, 255, 0, (struct sockaddr*)client_addr, client_addr_len) < 0){
+    if(recvfrom(client_fd, (char*)buff, 255, 0, (struct sockaddr*)client_addr, client_addr_len) < 0){
 		perror("recvfrom: ");
 		exit(-1);
     }
