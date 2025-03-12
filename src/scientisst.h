@@ -4,23 +4,26 @@
 
 #include <string>
 #include <vector>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h> 
-#include <unistd.h>
-#include <netdb.h>
+
 #include "esp_adc.h"
 
 #ifdef _WIN32 // 32-bit or 64-bit Windows
-
+#if defined(_MSC_VER)
+typedef intptr_t ssize_t;  // Define ssize_t as a signed pointer-sized integer
+#endif
 #include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")  // Link with Winsock library
+#include <io.h>
+#include <stdint.h>
+
 
 #endif
 
 #define SIGNAL_FILENAME "performance.txt"
 
 #define API_MODE_SCIENTISST 2
+#define API_MODE_SCIENTISST_V2 14
 #define API_MODE_JSON 3
 
 #define COM_MODE_BT     0
@@ -40,6 +43,7 @@
 #define AI6 6
 #define AX1 7
 #define AX2 8
+#define MAX_CHANNELS_SCIENTISST 8
 
 // The ScientISST device class.
 class ScientISST
@@ -252,5 +256,16 @@ private:
     //bool     isTTY;
 #endif
 };
+
+
+#ifdef _WIN32 // 32-bit or 64-bit Windows
+
+/** Windows Utility function to find bluetooth COM port number, given the device MAC address
+ * \param[in] macAddress Device MAC address given as a string, separated either by ':' or ' '
+ * 
+ * \return COM port number associated with given MAC address. Returns negative values if port is not found
+ */
+int getBluetoothCOMPort(const std::string& macAddress);
+#endif
 
 #endif

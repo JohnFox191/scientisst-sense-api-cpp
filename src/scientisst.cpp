@@ -1,11 +1,12 @@
 #ifdef _WIN32 // 32-bit or 64-bit Windows
 
-#define HASBLUETOOTH
+//#define HASBLUETOOTH
 
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include <winsock2.h>
 #include <ws2bth.h>
+#include <string>
 
 #else // Linux or Mac OS
 
@@ -15,7 +16,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#ifdef HASBLUETOOTH  // Linux only
+/* #ifdef HASBLUETOOTH  // Linux only
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
@@ -24,7 +25,7 @@
 #include <stdlib.h>
 
 #endif // HASBLUETOOTH
-
+ */
 void Sleep(int millisecs)
 {
    usleep(millisecs*1000);
@@ -67,7 +68,6 @@ static bool checkCRC4(const unsigned char *data, int len)
 
    return (crc == (data[len-1] & 0x0F));
 }
-
 /*****************************************************************************/
 
 // ScientISST public methods
@@ -462,6 +462,7 @@ void ScientISST::versionAndAdcChars(void){
         printf("Error, recieved %dbytes, of which %dbytes are for adc_chars and was expecting %ldbytes\n", rcv_bytes, adc_chars_size, 6*sizeof(uint32_t));
         throw Exception::INVALID_PARAMETER;
     }
+    
     memcpy(&adc1_chars, adc_chars, adc_chars_size);
 
     //Initialize fields for lookup table if necessary
@@ -678,7 +679,7 @@ int ScientISST::read(){
         
         
         if(!checkCRC4(buffer, packet_size)){
-            printf("checkCRC4 ERROR\n");
+            //printf("checkCRC4 ERROR\n");
         }
         while (!checkCRC4(buffer, packet_size)){  // if CRC check failed, try to resynchronize with the next valid frame
             // checking with one new byte at a time
@@ -688,33 +689,94 @@ int ScientISST::read(){
 
         Frame &f = *it;
 
-        if(api_mode == API_MODE_SCIENTISST){
+        if (api_mode == API_MODE_SCIENTISST)
+        {
             byte_it = 0;
 
-            //Get seq number and IO states
-            f.seq = buffer[packet_size-1] >> 4;
-            for(int i = 0; i < 4; i++)
-                f.digital[i] = ((buffer[packet_size-2] & (0x80 >> i)) != 0);
+            // Get seq number and IO states
+            f.seq = buffer[packet_size - 2] >> 4 | buffer[packet_size - 1] << 4;
+            for (int i = 0; i < 4; i++)
+                f.digital[i] = ((buffer[packet_size - 3] & (0x80 >> i)) != 0);
 
-            //Get channel values
-            for(int i = 0; i < num_chs; i++){
-                curr_ch = chs[num_chs-1-i];
+            // clear values
+            for (int i = 0; i < MAX_CHANNELS_SCIENTISST; i++) {
+                f.a[i] = 0;
+            }
 
-                //printf("%d\n", *(uint16_t*)(buffer+0) & 0xFFF);
-                
-                //If it's an AX channel
-                if(curr_ch == AX1 || curr_ch == AX2){
-                    f.a[curr_ch] = *(uint32_t*)(buffer+byte_it) & 0xFFFFFF;
+            // Get channel values
+            for (int i = 0; i < num_chs; i++)
+            {
+                // offset by 1 since analog 1 is at position 0 in the frame array
+                curr_ch = chs[num_chs - 1 - i] - 1 < 0 ? 0 : chs[num_chs - 1 - i] - 1;
+                f.a[curr_ch] = 0;
+                // printf("%d\n", *(uint16_t*)(buffer+0) & 0xFFF);
+
+                // If it's an AX channel
+                if (curr_ch == AX1 || curr_ch == AX2)
+                {
+                    f.a[curr_ch] = *(uint32_t *)(buffer + byte_it) & 0xFFFFFF;
                     byte_it += 3;
 
-                //If it's an AI channel
-                }else{
-                    if(!mid_frame_flag){
-                        f.a[curr_ch] = *(uint16_t*)(buffer+byte_it) & 0xFFF;
+                    // If it's an AI channel
+                }
+                else
+                {
+                    if (!mid_frame_flag)
+                    {
+                        f.a[curr_ch] = *(uint16_t *)(buffer + byte_it) & 0xFFF;
                         byte_it++;
                         mid_frame_flag = 1;
-                    }else{
-                        f.a[curr_ch] = *(uint16_t*)(buffer+byte_it) >> 4;
+                    }
+                    else
+                    {
+                        f.a[curr_ch] = *(uint16_t *)(buffer + byte_it) >> 4;
+                        byte_it += 2;
+                        mid_frame_flag = 0;
+                    }
+                }
+            }
+            mid_frame_flag = 0;
+        }
+
+        else if (api_mode == API_MODE_SCIENTISST_V2)
+        {
+            byte_it = 0;
+
+            // Get seq number and IO states
+            f.seq = (buffer[packet_size -1] << 28) | (buffer[packet_size -2] << 20) | (buffer[packet_size -3] <<
+                12) | (buffer[packet_size -4] << 4) | ((buffer[packet_size -5] & 0xF0) >> 4);
+            for (int i = 0; i < 4; i++)
+                f.digital[i] = ((buffer[packet_size - 6] & (0x80 >> i)) != 0);
+
+            // clear values
+            for (int i = 0; i < MAX_CHANNELS_SCIENTISST; i++) {
+                f.a[i] = 0;
+            }
+            // Get channel values
+            for (int i = 0; i < num_chs; i++)
+            {
+                curr_ch = chs[num_chs - 1 - i]-1 < 0 ? 0 : chs[num_chs - 1 - i] - 1;
+                // printf("%d\n", *(uint16_t*)(buffer+0) & 0xFFF);
+
+                // If it's an AX channel
+                if (curr_ch == AX1 || curr_ch == AX2)
+                {
+                    f.a[curr_ch] = *(uint32_t*)(buffer + byte_it) & 0xFFFFFF;
+                    byte_it += 3;
+
+                    // If it's an AI channel
+                }
+                else
+                {
+                    if (!mid_frame_flag)
+                    {
+                        f.a[curr_ch] = *(uint16_t*)(buffer + byte_it) & 0xFFF;
+                        byte_it++;
+                        mid_frame_flag = 1;
+                    }
+                    else
+                    {
+                        f.a[curr_ch] = *(uint16_t*)(buffer + byte_it) >> 4;
                         byte_it += 2;
                         mid_frame_flag = 0;
                     }
@@ -896,7 +958,7 @@ void ScientISST::send(uint8_t* data, int len){
             throw Exception(Exception::CONTACTING_DEVICE);
     }
     else{
-        if (::send(fd, buff, len, 0) != len)
+        if (::send(fd, (char*)buff, len, 0) != len)
             throw Exception(Exception::CONTACTING_DEVICE);
     }
 
@@ -922,7 +984,7 @@ int ScientISST::recv(void *data, int nbyttoread, uint8_t is_datagram){
     int bytes_read = 0;
 #ifdef _WIN32
    if (fd == INVALID_SOCKET)
-   {
+   {    
       for(int n = 0; n < nbyttoread;)
       {
          DWORD nbytread = 0;
@@ -935,7 +997,7 @@ int ScientISST::recv(void *data, int nbyttoread, uint8_t is_datagram){
             if (!GetCommModemStatus(hCom, &stat) || !(stat & MS_DSR_ON))
                throw Exception(Exception::CONTACTING_DEVICE);  // connection is lost
 
-            return ESP_STOP_LIVE_MODE;   // a timeout occurred
+            return n;   // a timeout occurred
          }
 
          n += nbytread;
@@ -1066,3 +1128,116 @@ void ScientISST::writeFrameFile(FILE* fd, Frame f){
     }
     fprintf(fd, "\n");
 }
+
+/*****************************************************************************/
+
+// COM serial port retrieval from Bluetooth MAC address
+#ifdef _WIN32 // 32-bit or 64-bit Windows
+int getBluetoothCOMPort(const std::string& macAddress) {
+    int comPort = -1;
+    HKEY hKey1;
+    DWORD keyIndex1 = 0;
+    char keyName1[MAX_PATH + 1];
+    DWORD maxKeyLen1;
+    LONG retVal1;
+
+    // Convert MAC address to uppercase and remove colons and spaces
+    std::string sAddr = macAddress;
+    for (auto& c : sAddr) c = toupper(c);
+    sAddr.erase(remove(sAddr.begin(), sAddr.end(), ':'), sAddr.end());
+    sAddr.erase(remove(sAddr.begin(), sAddr.end(), ' '), sAddr.end());
+    sAddr.erase(remove(sAddr.begin(), sAddr.end(), '-'), sAddr.end());
+
+    // Open registry key
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, R"(SYSTEM\CurrentControlSet\Enum\BTHENUM)", 0, KEY_READ | KEY_ENUMERATE_SUB_KEYS, &hKey1) != ERROR_SUCCESS) {
+        return -1; // Failed to open registry key
+    }
+
+    while (true) {
+        maxKeyLen1 = MAX_PATH;
+        retVal1 = RegEnumKeyEx(hKey1, keyIndex1, keyName1, &maxKeyLen1, NULL, NULL, NULL, NULL);
+
+        if (retVal1 == ERROR_NO_MORE_ITEMS) {
+            break;
+        }
+
+        if (retVal1 == ERROR_SUCCESS) {
+            HKEY hKey2;
+            DWORD keyIndex2 = 0;
+            char keyName2[MAX_PATH + 1];
+            DWORD maxKeyLen2;
+            LONG retVal2;
+
+            std::string subKey1 = "SYSTEM\\CurrentControlSet\\Enum\\BTHENUM\\" + std::string(keyName1);
+
+            // Open the subkey
+            if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, subKey1.c_str(), 0, KEY_READ | KEY_ENUMERATE_SUB_KEYS, &hKey2) != ERROR_SUCCESS) {
+                keyIndex1++;
+                continue;
+            }
+
+            while (true) {
+                maxKeyLen2 = MAX_PATH;
+                retVal2 = RegEnumKeyEx(hKey2, keyIndex2, keyName2, &maxKeyLen2, NULL, NULL, NULL, NULL);
+
+                if (retVal2 == ERROR_NO_MORE_ITEMS) {
+                    break;
+                }
+
+                if (retVal2 == ERROR_SUCCESS) {
+                    std::string fullKey = subKey1 + "\\" + std::string(keyName2);
+                    std::string upperKey = fullKey;
+                    for (auto& c : upperKey) c = toupper(c);
+
+                    if (upperKey.find("&" + sAddr + "_") != std::string::npos) {
+                        HKEY hKey;
+                        char szPort[101];
+                        DWORD dwLen = 100;
+
+                        std::string deviceParamsKey = fullKey + "\\Device Parameters";
+
+                        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, deviceParamsKey.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+                            if (RegQueryValueEx(hKey, "PortName", NULL, NULL, (LPBYTE)&szPort, &dwLen) == ERROR_SUCCESS) {
+                                szPort[dwLen] = 0;
+                                std::string sPort(szPort);
+
+                                for (auto& c : sPort) c = toupper(c);
+
+                                if (sPort.find("COM") != std::string::npos) {
+                                    sPort.erase(0, 3); // Remove "COM"
+                                    sPort.erase(sPort.find_last_not_of(" \t") + 1); // Trim whitespace
+
+                                    try {
+                                        comPort = std::stoi(sPort);
+                                    }
+                                    catch (...) {
+                                        comPort = -1;
+                                    }
+
+                                    if (comPort >= 0) {
+                                        RegCloseKey(hKey);
+                                        break;
+                                    }
+                                }
+                            }
+                            RegCloseKey(hKey);
+                        }
+                    }
+                }
+                keyIndex2++;
+            }
+
+            RegCloseKey(hKey2);
+
+            if (comPort >= 0) {
+                break;
+            }
+        }
+
+        keyIndex1++;
+    }
+
+    RegCloseKey(hKey1);
+    return comPort;
+}
+#endif
